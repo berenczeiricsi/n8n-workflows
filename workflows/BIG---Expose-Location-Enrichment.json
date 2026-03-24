@@ -1,0 +1,745 @@
+{
+  "id": "9TOg0e93bURiDsPE",
+  "name": "BIG - Expose Location Enrichment",
+  "nodes": [
+    {
+      "parameters": {
+        "inputSource": "passthrough"
+      },
+      "id": "loc-trigger",
+      "name": "Receive Enrichment Payload",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1.1,
+      "position": [
+        224,
+        448
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const items = $input.all();\n\nreturn items.map((item) => {\n  const payload = JSON.parse(JSON.stringify(item.json || {}));\n  const address = payload.address && typeof payload.address === 'object' ? payload.address : {};\n  const runtime = payload._runtime && typeof payload._runtime === 'object' ? payload._runtime : {};\n\n  if (!payload.location_enrichment || typeof payload.location_enrichment !== 'object') {\n    payload.location_enrichment = {\n      latitude: null,\n      longitude: null,\n      aerial_image_url: null,\n      location_description: null,\n      public_transport_access: null,\n      distance_city_center_min: null,\n      distance_train_station_min: null,\n      distance_airport_min: null,\n      infrastructure: [],\n    };\n  }\n\n  if (!payload.processing_metadata || typeof payload.processing_metadata !== 'object') {\n    payload.processing_metadata = {\n      document_id: null,\n      source_filename: null,\n      ingestion_channel: null,\n      processed_at: null,\n      status: null,\n      validation_errors: [],\n    };\n  }\n\n  if (!Array.isArray(payload.processing_metadata.validation_errors)) {\n    payload.processing_metadata.validation_errors = [];\n  }\n\n  const streetLine = [address.street, address.house_number].filter(Boolean).join(' ').trim();\n  const localityLine = [address.postal_code, address.city].filter(Boolean).join(' ').trim();\n  const hasMeaningfulAddress = Boolean(streetLine || localityLine);\n  const fullAddress = hasMeaningfulAddress\n    ? [streetLine, localityLine, address.country || 'Austria'].filter(Boolean).join(', ')\n    : null;\n\n  payload._runtime = {\n    ...runtime,\n    enrichment_attempted: hasMeaningfulAddress,\n    enrichment_failed: false,\n    enrichment_errors: Array.isArray(runtime.enrichment_errors) ? runtime.enrichment_errors : [],\n    infrastructure: Array.isArray(runtime.infrastructure) ? runtime.infrastructure : [],\n    full_address: fullAddress,\n    expose_location_description: payload.location_enrichment.location_description || null,\n  };\n\n  return { json: payload };\n});"
+      },
+      "id": "prepare-enrichment",
+      "name": "Prepare Enrichment Request",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        448,
+        448
+      ]
+    },
+    {
+      "parameters": {
+        "url": "https://maps.googleapis.com/maps/api/geocode/json",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpQueryAuth",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "address",
+              "value": "={{ $json._runtime.full_address || '' }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "geocode-address",
+      "name": "Geocode Address",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        672,
+        448
+      ],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 2000,
+      "credentials": {
+        "httpQueryAuth": {
+          "id": "uvoaRrT1QuTi3HVd",
+          "name": "BIG Google Maps Geocoding"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "const payload = JSON.parse(JSON.stringify($('Prepare Enrichment Request').first().json || {}));\nconst response = $input.first()?.json || {};\nconst runtime = payload._runtime && typeof payload._runtime === 'object' ? payload._runtime : {};\nconst errors = Array.isArray(runtime.enrichment_errors) ? [...runtime.enrichment_errors] : [];\n\nlet latitude = null;\nlet longitude = null;\n\nif (response.error) {\n  errors.push(`geocode:${response.error.message || response.error}`);\n}\n\nif (response.status === 'OK' && Array.isArray(response.results) && response.results[0]?.geometry?.location) {\n  latitude = Number(response.results[0].geometry.location.lat);\n  longitude = Number(response.results[0].geometry.location.lng);\n}\n\nif ((latitude === null || Number.isNaN(latitude)) || (longitude === null || Number.isNaN(longitude))) {\n  latitude = null;\n  longitude = null;\n  if (runtime.enrichment_attempted) {\n    errors.push(`geocode_status:${response.status || 'UNAVAILABLE'}`);\n  }\n}\n\npayload.location_enrichment.latitude = latitude;\npayload.location_enrichment.longitude = longitude;\npayload._runtime = {\n  ...runtime,\n  enrichment_errors: Array.from(new Set(errors)),\n  geocode_status: response.status || null,\n};\n\nreturn [{ json: payload }];"
+      },
+      "id": "process-geocode",
+      "name": "Process Geocode Result",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        896,
+        448
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://places.googleapis.com/v1/places:searchNearby",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-Goog-FieldMask",
+              "value": "places.displayName,places.formattedAddress,places.location,places.rating"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"includedTypes\": [\"train_station\"],\n  \"maxResultCount\": 5,\n  \"locationRestriction\": {\n    \"circle\": {\n      \"center\": {\n        \"latitude\": {{ $json.location_enrichment.latitude || 0 }},\n        \"longitude\": {{ $json.location_enrichment.longitude || 0 }}\n      },\n      \"radius\": 5000\n    }\n  }\n}",
+        "options": {}
+      },
+      "id": "find-train-station",
+      "name": "Find Nearby Train Station",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        1344,
+        176
+      ],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 2000,
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "3fi2efRRZjYxOJBz",
+          "name": "BIG Google Maps Places & Routes"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "const payload = JSON.parse(JSON.stringify($('Process Geocode Result').first().json || {}));\nconst response = $input.first()?.json || {};\nconst errors = Array.isArray(payload._runtime?.enrichment_errors) ? [...payload._runtime.enrichment_errors] : [];\n\nif (response.error) {\n  errors.push(`train_station:${response.error.message || response.error}`);\n}\n\nlet nearestTrainStation = null;\nif (Array.isArray(response.places) && response.places.length > 0) {\n  const place = response.places[0];\n  nearestTrainStation = {\n    name: place.displayName?.text || null,\n    address: place.formattedAddress || null,\n    latitude: Number(place.location?.latitude ?? null),\n    longitude: Number(place.location?.longitude ?? null),\n    rating: typeof place.rating === 'number' ? place.rating : null,\n  };\n}\n\npayload._runtime = {\n  ...payload._runtime,\n  nearest_train_station: nearestTrainStation,\n  enrichment_errors: Array.from(new Set(errors)),\n};\n\nreturn [{ json: payload }];"
+      },
+      "id": "process-train-station",
+      "name": "Process Train Station",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1568,
+        176
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://places.googleapis.com/v1/places:searchNearby",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-Goog-FieldMask",
+              "value": "places.displayName,places.formattedAddress,places.location,places.rating"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"includedTypes\": [\"airport\"],\n  \"maxResultCount\": 5,\n  \"locationRestriction\": {\n    \"circle\": {\n      \"center\": {\n        \"latitude\": {{ $json.location_enrichment.latitude || 0 }},\n        \"longitude\": {{ $json.location_enrichment.longitude || 0 }}\n      },\n      \"radius\": 50000\n    }\n  }\n}",
+        "options": {}
+      },
+      "id": "find-airport",
+      "name": "Find Nearby Airport",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        1792,
+        176
+      ],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 2000,
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "3fi2efRRZjYxOJBz",
+          "name": "BIG Google Maps Places & Routes"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "const payload = JSON.parse(JSON.stringify($('Process Train Station').first().json || {}));\nconst response = $input.first()?.json || {};\nconst errors = Array.isArray(payload._runtime?.enrichment_errors) ? [...payload._runtime.enrichment_errors] : [];\n\nif (response.error) {\n  errors.push(`airport:${response.error.message || response.error}`);\n}\n\nlet nearestAirport = null;\nif (Array.isArray(response.places) && response.places.length > 0) {\n  const place = response.places[0];\n  nearestAirport = {\n    name: place.displayName?.text || null,\n    address: place.formattedAddress || null,\n    latitude: Number(place.location?.latitude ?? null),\n    longitude: Number(place.location?.longitude ?? null),\n    rating: typeof place.rating === 'number' ? place.rating : null,\n  };\n}\n\npayload._runtime = {\n  ...payload._runtime,\n  nearest_airport: nearestAirport,\n  enrichment_errors: Array.from(new Set(errors)),\n};\n\nreturn [{ json: payload }];"
+      },
+      "id": "process-airport",
+      "name": "Process Airport",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2016,
+        176
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://places.googleapis.com/v1/places:searchNearby",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-Goog-FieldMask",
+              "value": "places.displayName,places.formattedAddress,places.location"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"includedTypes\": [\"school\", \"university\"],\n  \"maxResultCount\": 10,\n  \"locationRestriction\": {\n    \"circle\": {\n      \"center\": {\n        \"latitude\": {{ $json.location_enrichment.latitude || 0 }},\n        \"longitude\": {{ $json.location_enrichment.longitude || 0 }}\n      },\n      \"radius\": 2500\n    }\n  }\n}",
+        "options": {}
+      },
+      "id": "find-education",
+      "name": "Find Education Infrastructure",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        2240,
+        176
+      ],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 2000,
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "3fi2efRRZjYxOJBz",
+          "name": "BIG Google Maps Places & Routes"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "var payload = JSON.parse(JSON.stringify($('Process Airport').first().json || {}));\nvar response = $input.first()?.json || {};\nvar errors = Array.isArray(payload._runtime?.enrichment_errors) ? payload._runtime.enrichment_errors.slice() : [];\n\nif (response.error) {\n  errors.push('education:' + (response.error.message || response.error));\n}\n\nfunction distanceMeters(lat1, lon1, lat2, lon2) {\n  var numericValues = [lat1, lon1, lat2, lon2].map(function(value) {\n    return Number(value);\n  });\n  var distance = null;\n  if (!numericValues.some(function(value) { return !Number.isFinite(value); })) {\n    var toRad = function(deg) { return (deg * Math.PI) / 180; };\n    var earthRadiusM = 6371000;\n    var dLat = toRad(numericValues[2] - numericValues[0]);\n    var dLon = toRad(numericValues[3] - numericValues[1]);\n    var a = Math.sin(dLat / 2) * Math.sin(dLat / 2) + Math.cos(toRad(numericValues[0])) * Math.cos(toRad(numericValues[2])) * Math.sin(dLon / 2) * Math.sin(dLon / 2);\n    var c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));\n    distance = Math.round(earthRadiusM * c);\n  }\n  return { value: distance };\n}\n\nvar originLat = payload.location_enrichment ? payload.location_enrichment.latitude : null;\nvar originLon = payload.location_enrichment ? payload.location_enrichment.longitude : null;\nvar infrastructure = Array.isArray(payload._runtime?.infrastructure) ? payload._runtime.infrastructure.slice() : [];\nvar places = Array.isArray(response.places) ? response.places : [];\nfor (var index = 0; index < Math.min(places.length, 5); index += 1) {\n  var place = places[index];\n  infrastructure.push({\n    category: 'education',\n    name: place.displayName?.text || null,\n    address: place.formattedAddress || null,\n    distance_m: distanceMeters(originLat, originLon, place.location?.latitude, place.location?.longitude).value,\n  });\n}\n\npayload._runtime = {\n  ...payload._runtime,\n  infrastructure,\n  enrichment_errors: Array.from(new Set(errors)),\n};\n\nreturn [{ json: payload }];"
+      },
+      "id": "process-education",
+      "name": "Process Education Infrastructure",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2464,
+        176
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://places.googleapis.com/v1/places:searchNearby",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-Goog-FieldMask",
+              "value": "places.displayName,places.formattedAddress,places.location"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"includedTypes\": [\"hospital\", \"pharmacy\", \"doctor\"],\n  \"maxResultCount\": 10,\n  \"locationRestriction\": {\n    \"circle\": {\n      \"center\": {\n        \"latitude\": {{ $json.location_enrichment.latitude || 0 }},\n        \"longitude\": {{ $json.location_enrichment.longitude || 0 }}\n      },\n      \"radius\": 2500\n    }\n  }\n}",
+        "options": {}
+      },
+      "id": "find-healthcare",
+      "name": "Find Healthcare Infrastructure",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        2688,
+        176
+      ],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 2000,
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "3fi2efRRZjYxOJBz",
+          "name": "BIG Google Maps Places & Routes"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "var payload = JSON.parse(JSON.stringify($('Process Education Infrastructure').first().json || {}));\nvar response = $input.first()?.json || {};\nvar errors = Array.isArray(payload._runtime?.enrichment_errors) ? payload._runtime.enrichment_errors.slice() : [];\n\nif (response.error) {\n  errors.push('healthcare:' + (response.error.message || response.error));\n}\n\nfunction distanceMeters(lat1, lon1, lat2, lon2) {\n  var numericValues = [lat1, lon1, lat2, lon2].map(function(value) {\n    return Number(value);\n  });\n  var distance = null;\n  if (!numericValues.some(function(value) { return !Number.isFinite(value); })) {\n    var toRad = function(deg) { return (deg * Math.PI) / 180; };\n    var earthRadiusM = 6371000;\n    var dLat = toRad(numericValues[2] - numericValues[0]);\n    var dLon = toRad(numericValues[3] - numericValues[1]);\n    var a = Math.sin(dLat / 2) * Math.sin(dLat / 2) + Math.cos(toRad(numericValues[0])) * Math.cos(toRad(numericValues[2])) * Math.sin(dLon / 2) * Math.sin(dLon / 2);\n    var c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));\n    distance = Math.round(earthRadiusM * c);\n  }\n  return { value: distance };\n}\n\nvar originLat = payload.location_enrichment ? payload.location_enrichment.latitude : null;\nvar originLon = payload.location_enrichment ? payload.location_enrichment.longitude : null;\nvar infrastructure = Array.isArray(payload._runtime?.infrastructure) ? payload._runtime.infrastructure.slice() : [];\nvar places = Array.isArray(response.places) ? response.places : [];\nfor (var index = 0; index < Math.min(places.length, 5); index += 1) {\n  var place = places[index];\n  infrastructure.push({\n    category: 'healthcare',\n    name: place.displayName?.text || null,\n    address: place.formattedAddress || null,\n    distance_m: distanceMeters(originLat, originLon, place.location?.latitude, place.location?.longitude).value,\n  });\n}\n\npayload._runtime = {\n  ...payload._runtime,\n  infrastructure,\n  enrichment_errors: Array.from(new Set(errors)),\n};\n\nreturn [{ json: payload }];"
+      },
+      "id": "process-healthcare",
+      "name": "Process Healthcare Infrastructure",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2912,
+        176
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://places.googleapis.com/v1/places:searchNearby",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-Goog-FieldMask",
+              "value": "places.displayName,places.formattedAddress,places.location"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"includedTypes\": [\"supermarket\", \"grocery_store\", \"shopping_mall\"],\n  \"maxResultCount\": 10,\n  \"locationRestriction\": {\n    \"circle\": {\n      \"center\": {\n        \"latitude\": {{ $json.location_enrichment.latitude || 0 }},\n        \"longitude\": {{ $json.location_enrichment.longitude || 0 }}\n      },\n      \"radius\": 1500\n    }\n  }\n}",
+        "options": {}
+      },
+      "id": "find-retail",
+      "name": "Find Daily Retail Infrastructure",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        3136,
+        176
+      ],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 2000,
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "3fi2efRRZjYxOJBz",
+          "name": "BIG Google Maps Places & Routes"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "var payload = JSON.parse(JSON.stringify($('Process Healthcare Infrastructure').first().json || {}));\nvar response = $input.first()?.json || {};\nvar errors = Array.isArray(payload._runtime?.enrichment_errors) ? payload._runtime.enrichment_errors.slice() : [];\n\nif (response.error) {\n  errors.push('retail:' + (response.error.message || response.error));\n}\n\nfunction distanceMeters(lat1, lon1, lat2, lon2) {\n  var numericValues = [lat1, lon1, lat2, lon2].map(function(value) {\n    return Number(value);\n  });\n  var distance = null;\n  if (!numericValues.some(function(value) { return !Number.isFinite(value); })) {\n    var toRad = function(deg) { return (deg * Math.PI) / 180; };\n    var earthRadiusM = 6371000;\n    var dLat = toRad(numericValues[2] - numericValues[0]);\n    var dLon = toRad(numericValues[3] - numericValues[1]);\n    var a = Math.sin(dLat / 2) * Math.sin(dLat / 2) + Math.cos(toRad(numericValues[0])) * Math.cos(toRad(numericValues[2])) * Math.sin(dLon / 2) * Math.sin(dLon / 2);\n    var c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));\n    distance = Math.round(earthRadiusM * c);\n  }\n  return { value: distance };\n}\n\nvar originLat = payload.location_enrichment ? payload.location_enrichment.latitude : null;\nvar originLon = payload.location_enrichment ? payload.location_enrichment.longitude : null;\nvar infrastructure = Array.isArray(payload._runtime?.infrastructure) ? payload._runtime.infrastructure.slice() : [];\nvar places = Array.isArray(response.places) ? response.places : [];\nfor (var index = 0; index < Math.min(places.length, 5); index += 1) {\n  var place = places[index];\n  infrastructure.push({\n    category: 'retail',\n    name: place.displayName?.text || null,\n    address: place.formattedAddress || null,\n    distance_m: distanceMeters(originLat, originLon, place.location?.latitude, place.location?.longitude).value,\n  });\n}\n\npayload._runtime = {\n  ...payload._runtime,\n  infrastructure,\n  enrichment_errors: Array.from(new Set(errors)),\n};\n\nreturn [{ json: payload }];"
+      },
+      "id": "process-retail",
+      "name": "Process Daily Retail Infrastructure",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3360,
+        176
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://routes.googleapis.com/distanceMatrix/v2:computeRouteMatrix",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "X-Goog-FieldMask",
+              "value": "originIndex,destinationIndex,duration,condition,status"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"origins\": [\n    {\n      \"waypoint\": {\n        \"location\": {\n          \"latLng\": {\n            \"latitude\": {{ $json.location_enrichment.latitude || 0 }},\n            \"longitude\": {{ $json.location_enrichment.longitude || 0 }}\n          }\n        }\n      }\n    }\n  ],\n  \"destinations\": [\n    {\n      \"waypoint\": {\n        \"address\": {{ JSON.stringify(((($json.address && $json.address.city) ? $json.address.city : 'Wien') + ' Zentrum, ' + (($json.address && $json.address.country) ? $json.address.country : 'Austria')).trim()) }}\n      }\n    },\n    {\n      \"waypoint\": {\n        \"location\": {\n          \"latLng\": {\n            \"latitude\": {{ ($json._runtime && $json._runtime.nearest_train_station && $json._runtime.nearest_train_station.latitude != null) ? $json._runtime.nearest_train_station.latitude : ($json.location_enrichment.latitude || 0) }},\n            \"longitude\": {{ ($json._runtime && $json._runtime.nearest_train_station && $json._runtime.nearest_train_station.longitude != null) ? $json._runtime.nearest_train_station.longitude : ($json.location_enrichment.longitude || 0) }}\n          }\n        }\n      }\n    },\n    {\n      \"waypoint\": {\n        \"location\": {\n          \"latLng\": {\n            \"latitude\": {{ ($json._runtime && $json._runtime.nearest_airport && $json._runtime.nearest_airport.latitude != null) ? $json._runtime.nearest_airport.latitude : ($json.location_enrichment.latitude || 0) }},\n            \"longitude\": {{ ($json._runtime && $json._runtime.nearest_airport && $json._runtime.nearest_airport.longitude != null) ? $json._runtime.nearest_airport.longitude : ($json.location_enrichment.longitude || 0) }}\n          }\n        }\n      }\n    }\n  ],\n  \"travelMode\": \"TRANSIT\",\n  \"departureTime\": {{ JSON.stringify(new Date().toISOString()) }}\n}",
+        "options": {}
+      },
+      "id": "calculate-transit",
+      "name": "Calculate Transit Times",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        3584,
+        176
+      ],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 2000,
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "3fi2efRRZjYxOJBz",
+          "name": "BIG Google Maps Places & Routes"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "var inputItems = $input.all();\nvar firstInputJson = inputItems[0] ? (inputItems[0].json || {}) : {};\nvar retailItems = $('Process Daily Retail Infrastructure').all();\nvar geocodeItems = $('Process Geocode Result').all();\n\nvar payloadSource = firstInputJson;\nif (retailItems.length) {\n  payloadSource = retailItems[0].json || firstInputJson;\n} else if (firstInputJson.location_enrichment && firstInputJson.processing_metadata) {\n  payloadSource = firstInputJson;\n} else if (geocodeItems.length) {\n  payloadSource = geocodeItems[0].json || firstInputJson;\n}\n\nvar payload = JSON.parse(JSON.stringify(payloadSource || {}));\nvar runtime = payload._runtime && typeof payload._runtime === 'object' ? payload._runtime : {};\nvar errors = Array.isArray(runtime.enrichment_errors) ? runtime.enrichment_errors.slice() : [];\n\nvar routeMatrixElements = [];\nfor (var itemIndex = 0; itemIndex < inputItems.length; itemIndex += 1) {\n  var itemJson = inputItems[itemIndex] ? (inputItems[itemIndex].json || {}) : {};\n  if (itemJson && itemJson.location_enrichment && itemJson.processing_metadata) {\n    continue;\n  }\n  if (itemJson.error) {\n    errors.push('route_matrix:' + (itemJson.error.message || itemJson.error));\n  }\n  if (itemJson.destinationIndex != null) {\n    routeMatrixElements.push(itemJson);\n  }\n}\n\nfunction durationToMinutes(value) {\n  var minutes = null;\n  if (typeof value === 'string') {\n    var match = value.match(/^([0-9.]+)s$/);\n    if (match) {\n      var seconds = Number(match[1]);\n      minutes = Number.isFinite(seconds) ? Math.round(seconds / 60) : null;\n    }\n  }\n  return { value: minutes };\n}\n\nvar cityMinutes = null;\nvar trainMinutes = null;\nvar airportMinutes = null;\nfor (var routeIndex = 0; routeIndex < routeMatrixElements.length; routeIndex += 1) {\n  var element = routeMatrixElements[routeIndex];\n  if (!element || element.condition !== 'ROUTE_EXISTS') {\n    continue;\n  }\n  var minutes = durationToMinutes(element.duration).value;\n  if (minutes == null) {\n    continue;\n  }\n  if (element.destinationIndex === 0) cityMinutes = minutes;\n  if (element.destinationIndex === 1) trainMinutes = minutes;\n  if (element.destinationIndex === 2) airportMinutes = minutes;\n}\n\npayload.location_enrichment.distance_city_center_min = cityMinutes;\npayload.location_enrichment.distance_train_station_min = trainMinutes;\npayload.location_enrichment.distance_airport_min = airportMinutes;\npayload.location_enrichment.aerial_image_url = null;\n\nvar infrastructure = [];\nvar runtimeInfrastructure = Array.isArray(runtime.infrastructure) ? runtime.infrastructure : [];\nfor (var infraIndex = 0; infraIndex < runtimeInfrastructure.length; infraIndex += 1) {\n  var entry = runtimeInfrastructure[infraIndex];\n  if (entry && (entry.name || entry.address)) infrastructure.push(entry);\n}\npayload.location_enrichment.infrastructure = infrastructure;\n\nvar counts = { education: 0, healthcare: 0, retail: 0, other: 0 };\nfor (var countIndex = 0; countIndex < infrastructure.length; countIndex += 1) {\n  var infraEntry = infrastructure[countIndex];\n  var category = infraEntry.category || 'other';\n  if (Object.prototype.hasOwnProperty.call(counts, category)) counts[category] += 1;\n  else counts.other += 1;\n}\n\nvar address = payload.address && typeof payload.address === 'object' ? payload.address : {};\nvar generatedLocationSummary = [];\nif (address.city) generatedLocationSummary.push('Micro-location in ' + address.city);\nif (trainMinutes != null) generatedLocationSummary.push('nearest train station about ' + trainMinutes + ' min by public transport');\nif (airportMinutes != null) generatedLocationSummary.push('airport about ' + airportMinutes + ' min by public transport');\nif (counts.education) generatedLocationSummary.push(String(counts.education) + ' education POIs found nearby');\nif (counts.healthcare) generatedLocationSummary.push(String(counts.healthcare) + ' healthcare POIs found nearby');\nif (counts.retail) generatedLocationSummary.push(String(counts.retail) + ' retail POIs found nearby');\nif (runtime.expose_location_description) payload.location_enrichment.location_description = runtime.expose_location_description;\nelse if (generatedLocationSummary.length) payload.location_enrichment.location_description = generatedLocationSummary.join('; ');\nelse payload.location_enrichment.location_description = null;\n\nvar publicTransportSummary = [];\nif (cityMinutes != null) publicTransportSummary.push('city center about ' + cityMinutes + ' min');\nif (trainMinutes != null) publicTransportSummary.push('train station about ' + trainMinutes + ' min');\nif (airportMinutes != null) publicTransportSummary.push('airport about ' + airportMinutes + ' min');\npayload.location_enrichment.public_transport_access = publicTransportSummary.length ? publicTransportSummary.join('; ') : null;\n\npayload._runtime = {\n  ...runtime,\n  enrichment_errors: Array.from(new Set(errors)),\n  enrichment_failed: Boolean(runtime.enrichment_attempted && (payload.location_enrichment.latitude == null || payload.location_enrichment.longitude == null || errors.length > 0))\n};\n\nreturn [{ json: payload }];"
+      },
+      "id": "finalize-location",
+      "name": "Finalize Location Enrichment",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        4080,
+        464
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "version": 2,
+            "leftValue": "",
+            "caseSensitive": true,
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "has-coordinates",
+              "leftValue": "={{ $json.location_enrichment.latitude !== null && $json.location_enrichment.longitude !== null }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "coordinates-available",
+      "name": "Coordinates Available?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        1120,
+        448
+      ],
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "content": "## README\n- Owner: Richard Berenczei / richard.berenczei@pwc.com\n- Dependencies: BIG Google Maps Geocoding credential, BIG Google Maps Places & Routes credential\n- Logic Summary: Geocode the extracted address, enrich transport and nearby infrastructure context, and return a non-blocking enrichment payload for the core workflow.",
+        "height": 124,
+        "width": 1172,
+        "color": 7
+      },
+      "id": "a6b5de67-487d-4e45-9ba3-5a1ee0bf4890",
+      "name": "README",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -176,
+        32
+      ]
+    },
+    {
+      "parameters": {
+        "content": "## Trigger / Input\nBlue section: receive the extracted payload, normalize enrichment state, and geocode the full address.",
+        "height": 320,
+        "width": 840,
+        "color": 5
+      },
+      "id": "62923a65-209d-4f33-ada3-6b3c889e0e01",
+      "name": "Input & Geocoding",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        192,
+        368
+      ]
+    },
+    {
+      "parameters": {
+        "content": "## Success Path\nGreen section: when coordinates exist, collect nearby transport and infrastructure context from Google APIs.",
+        "height": 284,
+        "width": 2872,
+        "color": 4
+      },
+      "id": "f9d58eec-a0d2-4e4e-9600-55b17d81de68",
+      "name": "Enrichment Branch",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        1040,
+        80
+      ]
+    },
+    {
+      "parameters": {
+        "content": "## Error / Recovery\nRed section: keep geocoding or downstream API failures non-blocking and still emit a valid enrichment object with null fallbacks.",
+        "height": 320,
+        "width": 2880,
+        "color": 3
+      },
+      "id": "313ab4af-689c-44c7-895a-f9ad6afb79e5",
+      "name": "Fallback & Finalize",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        1040,
+        368
+      ]
+    },
+    {
+      "id": "meaningful-address-check",
+      "name": "Meaningful Address Available?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        672,
+        320
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "version": 2,
+            "leftValue": "",
+            "caseSensitive": true,
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "meaningful-address-true",
+              "leftValue": "={{ !!$json._runtime.enrichment_attempted }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "onError": "continueErrorOutput"
+    }
+  ],
+  "connections": {
+    "Receive Enrichment Payload": {
+      "main": [
+        [
+          {
+            "node": "Prepare Enrichment Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Geocode Address": {
+      "main": [
+        [
+          {
+            "node": "Process Geocode Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Find Nearby Train Station": {
+      "main": [
+        [
+          {
+            "node": "Process Train Station",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Process Train Station": {
+      "main": [
+        [
+          {
+            "node": "Find Nearby Airport",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Find Nearby Airport": {
+      "main": [
+        [
+          {
+            "node": "Process Airport",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Process Airport": {
+      "main": [
+        [
+          {
+            "node": "Find Education Infrastructure",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Find Education Infrastructure": {
+      "main": [
+        [
+          {
+            "node": "Process Education Infrastructure",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Process Education Infrastructure": {
+      "main": [
+        [
+          {
+            "node": "Find Healthcare Infrastructure",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Find Healthcare Infrastructure": {
+      "main": [
+        [
+          {
+            "node": "Process Healthcare Infrastructure",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Process Healthcare Infrastructure": {
+      "main": [
+        [
+          {
+            "node": "Find Daily Retail Infrastructure",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Find Daily Retail Infrastructure": {
+      "main": [
+        [
+          {
+            "node": "Process Daily Retail Infrastructure",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Process Daily Retail Infrastructure": {
+      "main": [
+        [
+          {
+            "node": "Calculate Transit Times",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Calculate Transit Times": {
+      "main": [
+        [
+          {
+            "node": "Finalize Location Enrichment",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Process Geocode Result": {
+      "main": [
+        [
+          {
+            "node": "Coordinates Available?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Coordinates Available?": {
+      "main": [
+        [
+          {
+            "node": "Find Nearby Train Station",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Finalize Location Enrichment",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Enrichment Request": {
+      "main": [
+        [
+          {
+            "node": "Meaningful Address Available?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Meaningful Address Available?": {
+      "main": [
+        [
+          {
+            "node": "Geocode Address",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Finalize Location Enrichment",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "callerPolicy": "workflowsFromSameOwner",
+    "availableInMCP": false,
+    "errorWorkflow": "PIlbEFexoMxalpwB"
+  },
+  "pinData": {},
+  "tags": [
+    "BIG",
+    "Lifecycle: Production",
+    "Type: Utility"
+  ]
+}
