@@ -1,0 +1,185 @@
+{
+  "id": "jjLBBRcy9SkkOEjv",
+  "name": "BIG - Expose Intake - Webhook",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "big/expose-intake",
+        "responseMode": "responseNode",
+        "options": {
+          "binaryPropertyName": "pdf"
+        }
+      },
+      "id": "webhook-trigger",
+      "name": "Expose Upload Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        224,
+        368
+      ],
+      "webhookId": "6746db5f-b3ef-4060-9b8e-d7ccc204ce86",
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "var inputItem = $input.first() || {};\nvar sourceJson = inputItem.json || {};\nvar sourceBinary = inputItem.binary || {};\nvar binaryKeys = Object.keys(sourceBinary);\nvar pdfKey = null;\nfor (var index = 0; index < binaryKeys.length; index += 1) {\n  var file = sourceBinary[binaryKeys[index]] || {};\n  var fileName = String(file.fileName || '').toLowerCase();\n  var mimeType = String(file.mimeType || '').toLowerCase();\n  if (mimeType === 'application/pdf' || fileName.endsWith('.pdf')) {\n    pdfKey = binaryKeys[index];\n    break;\n  }\n}\nif (!pdfKey) {\n  throw new Error('The webhook request did not include a PDF file.');\n}\nvar duplicateMode = String(sourceJson.duplicate_mode || sourceJson.duplicateMode || sourceJson['Duplicate Mode'] || 'overwrite').toLowerCase();\nif (['skip', 'overwrite', 'reprocess'].indexOf(duplicateMode) === -1) {\n  duplicateMode = 'overwrite';\n}\nreturn [{\n  json: {\n    source_filename: sourceJson.source_filename || sourceBinary[pdfKey].fileName || 'webhook-upload.pdf',\n    ingestion_channel: 'webhook',\n    received_date: sourceJson.received_date || sourceJson.receivedDate || null,\n    duplicate_mode: duplicateMode,\n    persist_result: !(sourceJson.persist_result === false || sourceJson.persist_result === 'false'),\n    persistence_mode: sourceJson.persistence_mode === 'none' ? 'none' : 'postgres'\n  },\n  binary: {\n    pdf: sourceBinary[pdfKey]\n  }\n}];"
+      },
+      "id": "normalize-webhook",
+      "name": "Normalize Webhook Upload",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        448,
+        368
+      ]
+    },
+    {
+      "parameters": {
+        "workflowId": {
+          "mode": "list",
+          "value": "ovWVru7z6KmBhaig",
+          "cachedResultName": "BIG - Expose Processing Core"
+        },
+        "mode": "each",
+        "options": {
+          "waitForSubWorkflow": true
+        }
+      },
+      "id": "execute-core",
+      "name": "Run Expose Processing Core",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.3,
+      "position": [
+        672,
+        368
+      ]
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "id": "respond-webhook",
+      "name": "Respond With Structured Result",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        896,
+        368
+      ]
+    },
+    {
+      "parameters": {
+        "content": "## README\n- Owner: Richard Berenczei / richard.berenczei@pwc.com\n- Dependencies: Webhook Trigger, Respond to Webhook, BIG - Expose Processing Core sub-workflow\n- Logic Summary: Accept a PDF over HTTP, normalize the request, process it through the core workflow, and return structured JSON synchronously.",
+        "height": 124,
+        "width": 1032,
+        "color": 7
+      },
+      "id": "bdbe7c33-8b0b-49d4-a9b5-5fc5e60a7536",
+      "name": "README",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -160,
+        48
+      ]
+    },
+    {
+      "parameters": {
+        "content": "## Trigger / Input\nBlue section: production webhook entry for external systems uploading a single exposé PDF.",
+        "height": 324,
+        "color": 5
+      },
+      "id": "a99e66ce-3a4f-41bb-b1c5-cc937e5645e8",
+      "name": "Webhook Intake",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        176,
+        208
+      ]
+    },
+    {
+      "parameters": {
+        "content": "## Success Path\nGreen section: align incoming multipart payloads to the common contract and invoke the extraction core.",
+        "height": 324,
+        "width": 424,
+        "color": 4
+      },
+      "id": "a069c6ba-eaef-4399-a568-39efd9027210",
+      "name": "Normalize & Execute",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        416,
+        208
+      ]
+    },
+    {
+      "parameters": {
+        "content": "## Success Path\nGreen section: return the final structured dataset to the webhook caller after the core finishes.",
+        "height": 324,
+        "width": 256,
+        "color": 4
+      },
+      "id": "cb7a4ff9-7a52-47e8-a681-064713be4b38",
+      "name": "Respond to Caller",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        848,
+        208
+      ]
+    }
+  ],
+  "connections": {
+    "Expose Upload Webhook": {
+      "main": [
+        [
+          {
+            "node": "Normalize Webhook Upload",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalize Webhook Upload": {
+      "main": [
+        [
+          {
+            "node": "Run Expose Processing Core",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Run Expose Processing Core": {
+      "main": [
+        [
+          {
+            "node": "Respond With Structured Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "errorWorkflow": "PIlbEFexoMxalpwB",
+    "callerPolicy": "workflowsFromSameOwner",
+    "availableInMCP": false,
+    "timeSavedMode": "fixed",
+    "binaryMode": "separate"
+  },
+  "pinData": {},
+  "tags": [
+    "BIG",
+    "Lifecycle: Draft",
+    "Type: Trigger"
+  ]
+}
