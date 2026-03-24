@@ -140,8 +140,8 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        3824,
-        480
+        2352,
+        672
       ]
     },
     {
@@ -171,7 +171,7 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        2448,
+        2768,
         800
       ]
     },
@@ -200,7 +200,7 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.4,
       "position": [
-        2672,
+        2992,
         800
       ],
       "retryOnFail": true,
@@ -222,7 +222,7 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        2896,
+        3232,
         800
       ]
     },
@@ -243,7 +243,7 @@
       "type": "n8n-nodes-base.executeWorkflow",
       "typeVersion": 1.3,
       "position": [
-        3120,
+        3472,
         800
       ]
     },
@@ -256,7 +256,7 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        3344,
+        3680,
         800
       ]
     },
@@ -290,8 +290,8 @@
       "type": "n8n-nodes-base.if",
       "typeVersion": 2.3,
       "position": [
-        3568,
-        800
+        3936,
+        784
       ],
       "onError": "continueErrorOutput"
     },
@@ -312,7 +312,7 @@
       "type": "n8n-nodes-base.executeWorkflow",
       "typeVersion": 1.3,
       "position": [
-        3792,
+        4256,
         784
       ]
     },
@@ -325,7 +325,7 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        4048,
+        4592,
         816
       ]
     },
@@ -376,14 +376,14 @@
       "type": "n8n-nodes-base.stickyNote",
       "typeVersion": 1,
       "position": [
-        32,
-        32
+        -96,
+        208
       ]
     },
     {
       "parameters": {
         "content": "## Trigger / Input\nBlue section: receive the shared intake contract, hash the source PDF, and decide whether duplicate lookup should run.",
-        "height": 360,
+        "height": 408,
         "width": 1180,
         "color": 5
       },
@@ -393,14 +393,14 @@
       "typeVersion": 1,
       "position": [
         144,
-        560
+        544
       ]
     },
     {
       "parameters": {
         "content": "## Success Path\nGreen section: extract PDF text and parse every field that can be derived deterministically before AI is consulted.",
-        "height": 332,
-        "width": 520,
+        "height": 396,
+        "width": 808,
         "color": 4
       },
       "id": "97849d4c-7980-4549-9125-4dcb797f56da",
@@ -409,14 +409,14 @@
       "typeVersion": 1,
       "position": [
         1888,
-        608
+        560
       ]
     },
     {
       "parameters": {
         "content": "## AI Reasoning\nOrange section: ask OpenAI to fill only missing or ambiguous schema fields using strict JSON output.",
-        "height": 348,
-        "width": 632,
+        "height": 396,
+        "width": 680,
         "color": 2
       },
       "id": "58ff8db1-64de-48ee-adc6-6618e3a2f137",
@@ -424,15 +424,15 @@
       "type": "n8n-nodes-base.stickyNote",
       "typeVersion": 1,
       "position": [
-        2416,
-        608
+        2704,
+        560
       ]
     },
     {
       "parameters": {
         "content": "## Success Path\nGreen section: enrich the address, validate business-critical fields, optionally persist, and return the final stable payload.",
-        "height": 348,
-        "width": 1160,
+        "height": 396,
+        "width": 1384,
         "color": 4
       },
       "id": "c6a68d12-4c41-40b6-8096-3b061fc7d22f",
@@ -440,8 +440,8 @@
       "type": "n8n-nodes-base.stickyNote",
       "typeVersion": 1,
       "position": [
-        3056,
-        608
+        3392,
+        560
       ]
     },
     {
@@ -458,17 +458,17 @@
       ]
     },
     {
+      "parameters": {
+        "jsCode": "var inputItem = $input.first() || {};\nvar payload = JSON.parse(JSON.stringify(inputItem.json || {}));\nvar runtime = payload._runtime && typeof payload._runtime === 'object' ? payload._runtime : {};\nvar sourceFilename = String((payload.processing_metadata && payload.processing_metadata.source_filename) || '');\nvar fullText = String(runtime.extracted_text || '');\n\nfunction cleanText(value) {\n  var cleaned = null;\n  if (value != null) {\n    var text = String(value).replace(/\\s+/g, ' ').trim();\n    cleaned = text || null;\n  }\n  return { value: cleaned };\n}\n\nfunction looksLikeHeading(value) {\n  var text = cleanText(value).value;\n  var looksLike = false;\n  if (text) {\n    if (/^(verkaufsprozess|disclaimer|kontakt|investment|lage|standort|mikrolage)$/i.test(text)) {\n      looksLike = true;\n    } else {\n      var letters = text.replace(/[^A-Za-zÄÖÜäöüß]/g, '');\n      looksLike = Boolean(letters) && letters.length >= 6 && letters === letters.toUpperCase();\n    }\n  }\n  return { value: looksLike };\n}\n\nfunction normalizePhone(value) {\n  var normalized = null;\n  var text = cleanText(value).value;\n  if (text) {\n    if (!/^\\d{1,2}\\s*[./-]?\\s*\\d{4}$/.test(text)) {\n      var digits = text.replace(/\\D/g, '');\n      if (digits.length >= 8) normalized = text;\n    }\n  }\n  return { value: normalized };\n}\n\nfunction parseFilenameAddress(filename) {\n  var result = null;\n  var baseName = String(filename || '').replace(/\\.pdf$/i, '');\n  if (baseName) {\n    var segments = baseName.split('_').map(function(segment) {\n      return cleanText(segment).value;\n    }).filter(Boolean);\n\n    if (segments.length >= 2) {\n      var streetSegment = segments[segments.length - 2];\n      var localitySegment = segments[segments.length - 1];\n      var streetMatch = streetSegment ? streetSegment.match(/^(.+?)\\s+(\\d+[A-Za-z]?)$/) : null;\n      var localityMatch = localitySegment ? localitySegment.match(/^(\\d{4})\\s+(.+)$/) : null;\n      if (streetMatch && localityMatch) {\n        result = {\n          street: cleanText(streetMatch[1]).value,\n          house_number: cleanText(streetMatch[2]).value,\n          postal_code: cleanText(localityMatch[1]).value,\n          city: cleanText(localityMatch[2]).value,\n        };\n      }\n    }\n\n    if (!result) {\n      var normalized = cleanText(baseName.replace(/_/g, ' ')).value;\n      var fallbackMatch = normalized ? normalized.match(/(.+?)\\s+(\\d+[A-Za-z]?)\\s+(\\d{4})\\s+([A-Za-zÄÖÜäöüß.' -]+)$/) : null;\n      if (fallbackMatch) {\n        result = {\n          street: cleanText(fallbackMatch[1].replace(/^(?:CBRE|Teaser|Expose|Exposé|Factsheet)\\s+/ig, '')).value,\n          house_number: cleanText(fallbackMatch[2]).value,\n          postal_code: cleanText(fallbackMatch[3]).value,\n          city: cleanText(fallbackMatch[4]).value,\n        };\n      }\n    }\n  }\n  return { value: result };\n}\n\nif (!payload.provider_contact || typeof payload.provider_contact !== 'object') {\n  payload.provider_contact = {\n    name: null,\n    company: null,\n    phone: null,\n    email: null,\n  };\n}\n\nif (looksLikeHeading(payload.provider_contact.name).value) {\n  payload.provider_contact.name = null;\n}\n\npayload.provider_contact.phone = normalizePhone(payload.provider_contact.phone).value;\n\nif (!payload.provider && /\\bCBRE\\b/i.test(fullText + '\\n' + sourceFilename)) {\n  payload.provider = 'CBRE';\n}\n\nif (!payload.provider_contact.company && payload.provider) {\n  payload.provider_contact.company = payload.provider;\n}\n\nif (!payload.provider && payload.provider_contact.company) {\n  payload.provider = payload.provider_contact.company;\n}\n\nvar filenameAddress = parseFilenameAddress(sourceFilename).value;\nif (filenameAddress) {\n  payload.address = payload.address && typeof payload.address === 'object' ? payload.address : {};\n  if (!payload.address.country) payload.address.country = 'Austria';\n  if (!payload.address.street && filenameAddress.street) payload.address.street = filenameAddress.street;\n  if (!payload.address.house_number && filenameAddress.house_number) payload.address.house_number = filenameAddress.house_number;\n  if (!payload.address.postal_code && filenameAddress.postal_code) payload.address.postal_code = filenameAddress.postal_code;\n  if (!payload.address.city && filenameAddress.city) payload.address.city = filenameAddress.city;\n}\n\nvar lowCoverage = fullText.length < 1200 || (/VERKAUFSPROZESS/i.test(fullText) && /DISCLAIMER/i.test(fullText) && !/\\d{4}\\s+Wien/i.test(fullText));\npayload._runtime = {\n  ...runtime,\n  extraction_quality: lowCoverage ? 'low_text_layer_coverage' : (runtime.extraction_quality || null),\n};\n\nreturn [{ json: payload }];"
+      },
       "id": "sanitize-extracted-fields-v1",
       "name": "Parse Expose Deterministically",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        2448,
-        936
-      ],
-      "parameters": {
-        "jsCode": "var inputItem = $input.first() || {};\nvar payload = JSON.parse(JSON.stringify(inputItem.json || {}));\nvar runtime = payload._runtime && typeof payload._runtime === 'object' ? payload._runtime : {};\nvar sourceFilename = String((payload.processing_metadata && payload.processing_metadata.source_filename) || '');\nvar fullText = String(runtime.extracted_text || '');\n\nfunction cleanText(value) {\n  var cleaned = null;\n  if (value != null) {\n    var text = String(value).replace(/\\s+/g, ' ').trim();\n    cleaned = text || null;\n  }\n  return { value: cleaned };\n}\n\nfunction looksLikeHeading(value) {\n  var text = cleanText(value).value;\n  var looksLike = false;\n  if (text) {\n    if (/^(verkaufsprozess|disclaimer|kontakt|investment|lage|standort|mikrolage)$/i.test(text)) {\n      looksLike = true;\n    } else {\n      var letters = text.replace(/[^A-Za-zÄÖÜäöüß]/g, '');\n      looksLike = Boolean(letters) && letters.length >= 6 && letters === letters.toUpperCase();\n    }\n  }\n  return { value: looksLike };\n}\n\nfunction normalizePhone(value) {\n  var normalized = null;\n  var text = cleanText(value).value;\n  if (text) {\n    if (!/^\\d{1,2}\\s*[./-]?\\s*\\d{4}$/.test(text)) {\n      var digits = text.replace(/\\D/g, '');\n      if (digits.length >= 8) normalized = text;\n    }\n  }\n  return { value: normalized };\n}\n\nfunction parseFilenameAddress(filename) {\n  var result = null;\n  var baseName = String(filename || '').replace(/\\.pdf$/i, '');\n  if (baseName) {\n    var segments = baseName.split('_').map(function(segment) {\n      return cleanText(segment).value;\n    }).filter(Boolean);\n\n    if (segments.length >= 2) {\n      var streetSegment = segments[segments.length - 2];\n      var localitySegment = segments[segments.length - 1];\n      var streetMatch = streetSegment ? streetSegment.match(/^(.+?)\\s+(\\d+[A-Za-z]?)$/) : null;\n      var localityMatch = localitySegment ? localitySegment.match(/^(\\d{4})\\s+(.+)$/) : null;\n      if (streetMatch && localityMatch) {\n        result = {\n          street: cleanText(streetMatch[1]).value,\n          house_number: cleanText(streetMatch[2]).value,\n          postal_code: cleanText(localityMatch[1]).value,\n          city: cleanText(localityMatch[2]).value,\n        };\n      }\n    }\n\n    if (!result) {\n      var normalized = cleanText(baseName.replace(/_/g, ' ')).value;\n      var fallbackMatch = normalized ? normalized.match(/(.+?)\\s+(\\d+[A-Za-z]?)\\s+(\\d{4})\\s+([A-Za-zÄÖÜäöüß.' -]+)$/) : null;\n      if (fallbackMatch) {\n        result = {\n          street: cleanText(fallbackMatch[1].replace(/^(?:CBRE|Teaser|Expose|Exposé|Factsheet)\\s+/ig, '')).value,\n          house_number: cleanText(fallbackMatch[2]).value,\n          postal_code: cleanText(fallbackMatch[3]).value,\n          city: cleanText(fallbackMatch[4]).value,\n        };\n      }\n    }\n  }\n  return { value: result };\n}\n\nif (!payload.provider_contact || typeof payload.provider_contact !== 'object') {\n  payload.provider_contact = {\n    name: null,\n    company: null,\n    phone: null,\n    email: null,\n  };\n}\n\nif (looksLikeHeading(payload.provider_contact.name).value) {\n  payload.provider_contact.name = null;\n}\n\npayload.provider_contact.phone = normalizePhone(payload.provider_contact.phone).value;\n\nif (!payload.provider && /\\bCBRE\\b/i.test(fullText + '\\n' + sourceFilename)) {\n  payload.provider = 'CBRE';\n}\n\nif (!payload.provider_contact.company && payload.provider) {\n  payload.provider_contact.company = payload.provider;\n}\n\nif (!payload.provider && payload.provider_contact.company) {\n  payload.provider = payload.provider_contact.company;\n}\n\nvar filenameAddress = parseFilenameAddress(sourceFilename).value;\nif (filenameAddress) {\n  payload.address = payload.address && typeof payload.address === 'object' ? payload.address : {};\n  if (!payload.address.country) payload.address.country = 'Austria';\n  if (!payload.address.street && filenameAddress.street) payload.address.street = filenameAddress.street;\n  if (!payload.address.house_number && filenameAddress.house_number) payload.address.house_number = filenameAddress.house_number;\n  if (!payload.address.postal_code && filenameAddress.postal_code) payload.address.postal_code = filenameAddress.postal_code;\n  if (!payload.address.city && filenameAddress.city) payload.address.city = filenameAddress.city;\n}\n\nvar lowCoverage = fullText.length < 1200 || (/VERKAUFSPROZESS/i.test(fullText) && /DISCLAIMER/i.test(fullText) && !/\\d{4}\\s+Wien/i.test(fullText));\npayload._runtime = {\n  ...runtime,\n  extraction_quality: lowCoverage ? 'low_text_layer_coverage' : (runtime.extraction_quality || null),\n};\n\nreturn [{ json: payload }];"
-      }
+        2464,
+        800
+      ]
     }
   ],
   "connections": {
