@@ -1,0 +1,367 @@
+{
+  "id": "Vl5mRAp0tvwbmWl0",
+  "name": "BIG - Workflow Backup Orchestrator",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "triggerAtHour": 2
+            }
+          ]
+        }
+      },
+      "id": "schedule-trigger",
+      "name": "Schedule Daily Backup",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        208,
+        288
+      ]
+    },
+    {
+      "parameters": {},
+      "id": "manual-trigger",
+      "name": "Run Backup Manually",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        208,
+        528
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const response = $input.first().json;\nconst workflows = response.data || response || [];\nconst now = new Date().toISOString();\n\nconst allWorkflows = Array.isArray(workflows) ? workflows : [];\nconst bigWorkflows = allWorkflows.filter(wf => {\n  const tags = wf.tags || [];\n  return tags.some(t => {\n    const name = typeof t === 'object' ? t.name : t;\n    return name === 'BIG';\n  });\n});\n\nif (bigWorkflows.length === 0) {\n  throw new Error('No workflows with the BIG tag were found. Total workflows returned: ' + allWorkflows.length);\n}\n\nreturn bigWorkflows.map(wf => {\n  const exportObj = {\n    id: wf.id,\n    name: wf.name,\n    nodes: wf.nodes || [],\n    connections: wf.connections || {},\n    settings: wf.settings || {},\n    pinData: {},\n    tags: (wf.tags || []).map(t => typeof t === 'object' ? t.name : t),\n  };\n  const slug = wf.name\n    .replace(/[^a-zA-Z0-9 -]/g, '')\n    .trim()\n    .replace(/ +/g, '-');\n  return {\n    json: {\n      workflow_id: wf.id,\n      workflow_name: wf.name,\n      file_path: slug + '.json',\n      version_id: wf.versionId || null,\n      version_counter: wf.versionCounter || null,\n      active: wf.active,\n      export_json: JSON.stringify(exportObj, null, 2),\n      backup_timestamp: now,\n    }\n  };\n});"
+      },
+      "id": "prepare-exports",
+      "name": "Prepare Exports",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        768,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "url": "=https://api.github.com/repos/berenczeiricsi/n8n-workflows/contents/workflows/{{ $json.file_path }}",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "githubApi",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Accept",
+              "value": "application/vnd.github.v3+json"
+            },
+            {
+              "name": "User-Agent",
+              "value": "n8n-backup-orchestrator"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "check-github-file",
+      "name": "Check Existing File on GitHub",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        1200,
+        336
+      ],
+      "credentials": {
+        "githubApi": {
+          "id": "YOQuy4B0UzYkplLU",
+          "name": "GitHub account"
+        }
+      },
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "jsCode": "const ghResponse = $input.first().json;\nconst exp = $('Process One at a Time').first().json;\nconst existingSha = ghResponse.sha || null;\nconst isUpdate = !!existingSha;\nconst content = Buffer.from(exp.export_json, 'utf-8').toString('base64');\nconst action = isUpdate ? 'update' : 'create';\nconst message = action + ': ' + exp.workflow_name +\n  '\\n\\nWorkflow ID: ' + exp.workflow_id +\n  '\\nVersion: ' + (exp.version_counter || 'unknown') +\n  '\\nActive: ' + exp.active +\n  '\\nBackup: ' + exp.backup_timestamp;\nconst body = { message: message, content: content };\nif (existingSha) {\n  body.sha = existingSha;\n}\nreturn [{\n  json: {\n    file_path: exp.file_path,\n    workflow_name: exp.workflow_name,\n    workflow_id: exp.workflow_id,\n    action: action,\n    commit_body: body,\n  }\n}];"
+      },
+      "id": "prepare-commit",
+      "name": "Prepare GitHub Commit",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1424,
+        336
+      ]
+    },
+    {
+      "parameters": {
+        "method": "PUT",
+        "url": "=https://api.github.com/repos/berenczeiricsi/n8n-workflows/contents/workflows/{{ $json.file_path }}",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "githubApi",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Accept",
+              "value": "application/vnd.github.v3+json"
+            },
+            {
+              "name": "User-Agent",
+              "value": "n8n-backup-orchestrator"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.commit_body) }}",
+        "options": {}
+      },
+      "id": "push-to-github",
+      "name": "Push to GitHub",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        1696,
+        336
+      ],
+      "credentials": {
+        "githubApi": {
+          "id": "YOQuy4B0UzYkplLU",
+          "name": "GitHub account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "return [{\n  json: {\n    status: 'complete',\n    backup_timestamp: new Date().toISOString(),\n    repository: 'berenczeiricsi/n8n-workflows',\n    message: 'All BIG workflows have been backed up to GitHub. Check the repository commit history for details.',\n  }\n}];"
+      },
+      "id": "backup-summary",
+      "name": "Backup Summary",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1888,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "content": "## README\n- Owner: Richard Berenczei / richard.berenczei@pwc.com\n- Dependencies: n8n API credential, GitHub API credential (PAT with repo scope)\n- Target: github.com/berenczeiricsi/n8n-workflows → workflows/ directory\n- Logic Summary: Export all BIG-tagged workflows as clean JSON and commit them to GitHub for version control. Runs daily at 2 AM or on demand.\n\n## Setup\n1. Create an **n8n API key** at Settings → API → Create API Key\n2. Add an **n8n API credential** in n8n (type: n8n API) with that key\n3. Create a **GitHub Personal Access Token** with `repo` scope\n4. Add a **GitHub API credential** in n8n (type: GitHub API) with that token\n5. Assign both credentials to the highlighted nodes, then activate the workflow",
+        "height": 324,
+        "width": 1016,
+        "color": 7
+      },
+      "id": "readme-note",
+      "name": "README",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -208,
+        -192
+      ]
+    },
+    {
+      "parameters": {
+        "content": "## Trigger / Input\nBlue section: scheduled daily backup at 2 AM UTC plus manual trigger for on-demand runs.",
+        "height": 496,
+        "width": 300,
+        "color": 5
+      },
+      "id": "trigger-section-note",
+      "name": "Trigger Section",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        128,
+        160
+      ]
+    },
+    {
+      "parameters": {
+        "content": "## Success Path\nGreen section: list all BIG-tagged workflows via n8n API, strip volatile fields (pinData, staticData), and prepare version-control-clean JSON exports.",
+        "height": 496,
+        "width": 600,
+        "color": 4
+      },
+      "id": "processing-section-note",
+      "name": "Export Section",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        432,
+        160
+      ]
+    },
+    {
+      "parameters": {
+        "content": "## Success Path (continued)\nGreen section: check if each file already exists on GitHub (to get its SHA for updates), build commit messages with version metadata, push via GitHub Contents API, and aggregate a backup summary.",
+        "height": 496,
+        "width": 980,
+        "color": 4
+      },
+      "id": "github-section-note",
+      "name": "GitHub Section",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        1040,
+        160
+      ]
+    },
+    {
+      "parameters": {
+        "url": "http://localhost:5678/api/v1/workflows",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "n8nApi",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Accept",
+              "value": "application/json"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "list-workflows",
+      "name": "List BIG Workflows",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        480,
+        400
+      ],
+      "credentials": {
+        "n8nApi": {
+          "id": "drCKmQno2XOlN3vx",
+          "name": "n8n account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "id": "split-batches",
+      "name": "Process One at a Time",
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [
+        912,
+        400
+      ]
+    }
+  ],
+  "connections": {
+    "Check Existing File on GitHub": {
+      "main": [
+        [
+          {
+            "node": "Prepare GitHub Commit",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare GitHub Commit": {
+      "main": [
+        [
+          {
+            "node": "Push to GitHub",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Schedule Daily Backup": {
+      "main": [
+        [
+          {
+            "node": "List BIG Workflows",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Run Backup Manually": {
+      "main": [
+        [
+          {
+            "node": "List BIG Workflows",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "List BIG Workflows": {
+      "main": [
+        [
+          {
+            "node": "Prepare Exports",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Exports": {
+      "main": [
+        [
+          {
+            "node": "Process One at a Time",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Process One at a Time": {
+      "main": [
+        [
+          {
+            "node": "Backup Summary",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Check Existing File on GitHub",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Push to GitHub": {
+      "main": [
+        [
+          {
+            "node": "Process One at a Time",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "errorWorkflow": "PIlbEFexoMxalpwB",
+    "callerPolicy": "workflowsFromSameOwner",
+    "availableInMCP": false
+  },
+  "pinData": {},
+  "tags": [
+    "BIG",
+    "Lifecycle: Production",
+    "Type: Backup"
+  ]
+}
