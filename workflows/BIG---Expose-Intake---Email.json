@@ -1,0 +1,137 @@
+{
+  "id": "XpiCSPy28e22HNsQ",
+  "name": "BIG - Expose Intake - Email",
+  "nodes": [
+    {
+      "parameters": {
+        "downloadAttachments": true,
+        "options": {}
+      },
+      "id": "email-trigger",
+      "name": "Watch Expose Inbox",
+      "type": "n8n-nodes-base.emailReadImap",
+      "typeVersion": 2.1,
+      "position": [
+        208,
+        288
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "var inputItems = $input.all();\nvar outputItems = [];\nfor (var itemIndex = 0; itemIndex < inputItems.length; itemIndex += 1) {\n  var currentItem = inputItems[itemIndex] || {};\n  var sourceJson = currentItem.json || {};\n  var sourceBinary = currentItem.binary || {};\n  var binaryKeys = Object.keys(sourceBinary);\n  for (var keyIndex = 0; keyIndex < binaryKeys.length; keyIndex += 1) {\n    var binaryKey = binaryKeys[keyIndex];\n    var file = sourceBinary[binaryKey] || {};\n    var fileName = String(file.fileName || '').toLowerCase();\n    var mimeType = String(file.mimeType || '').toLowerCase();\n    if (mimeType === 'application/pdf' || fileName.endsWith('.pdf')) {\n      outputItems.push({\n        json: {\n          source_filename: file.fileName || ('email-attachment-' + keyIndex + '.pdf'),\n          ingestion_channel: 'email',\n          received_date: sourceJson.date || sourceJson.receivedDate || sourceJson.sentDate || sourceJson.internalDate || null,\n          duplicate_mode: 'overwrite',\n          persist_result: true,\n          persistence_mode: 'postgres',\n          email_subject: sourceJson.subject || null,\n          email_from: sourceJson.from || null\n        },\n        binary: {\n          pdf: file\n        }\n      });\n    }\n  }\n}\nreturn outputItems;"
+      },
+      "id": "normalize-email",
+      "name": "Split PDF Attachments",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        432,
+        288
+      ]
+    },
+    {
+      "parameters": {
+        "workflowId": {
+          "mode": "list",
+          "value": "ovWVru7z6KmBhaig",
+          "cachedResultName": "BIG - Expose Processing Core"
+        },
+        "mode": "each",
+        "options": {
+          "waitForSubWorkflow": true
+        }
+      },
+      "id": "execute-core",
+      "name": "Run Expose Processing Core",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.3,
+      "position": [
+        656,
+        288
+      ]
+    },
+    {
+      "parameters": {
+        "content": "## README\n- Owner: Richard Berenczei / richard.berenczei@pwc.com\n- Dependencies: IMAP credential, BIG - Expose Processing Core sub-workflow\n- Logic Summary: Watch the exposé mailbox, split PDF attachments into one item per file, and hand each PDF to the shared extraction core.",
+        "height": 140,
+        "width": 974,
+        "color": 7
+      },
+      "id": "5c595396-0b5f-4ad8-98d5-4fcdd27fa5d8",
+      "name": "README",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -208,
+        -80
+      ]
+    },
+    {
+      "parameters": {
+        "content": "## Trigger / Input\nBlue section: poll the configured inbox and download message attachments for intake automation.",
+        "height": 300,
+        "color": 5
+      },
+      "id": "e0f42b08-16db-45f7-809a-2f2510a9ce17",
+      "name": "Mailbox Trigger",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        144,
+        160
+      ]
+    },
+    {
+      "parameters": {
+        "content": "## Success Path\nGreen section: filter to PDFs, emit one item per attachment, and dispatch the normalized payload to the core workflow.",
+        "height": 300,
+        "width": 456,
+        "color": 4
+      },
+      "id": "d5726552-af3e-451e-8b44-5d2d936587f4",
+      "name": "Attachment Handoff",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        384,
+        160
+      ]
+    }
+  ],
+  "connections": {
+    "Watch Expose Inbox": {
+      "main": [
+        [
+          {
+            "node": "Split PDF Attachments",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Split PDF Attachments": {
+      "main": [
+        [
+          {
+            "node": "Run Expose Processing Core",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "errorWorkflow": "PIlbEFexoMxalpwB",
+    "callerPolicy": "workflowsFromSameOwner",
+    "availableInMCP": false
+  },
+  "pinData": {},
+  "tags": [
+    "BIG",
+    "Lifecycle: Draft",
+    "Type: Trigger"
+  ]
+}
