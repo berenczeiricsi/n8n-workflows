@@ -42,7 +42,7 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        768,
+        688,
         400
       ]
     },
@@ -251,7 +251,7 @@
       "type": "n8n-nodes-base.splitInBatches",
       "typeVersion": 3,
       "position": [
-        912,
+        896,
         400
       ]
     }
