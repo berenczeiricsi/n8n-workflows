@@ -1,0 +1,206 @@
+{
+  "id": "PIlbEFexoMxalpwB",
+  "name": "BIG - Expose Error Handler",
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "error-trigger",
+      "name": "Error Trigger",
+      "type": "n8n-nodes-base.errorTrigger",
+      "typeVersion": 1,
+      "position": [
+        224,
+        304
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Safely extract primitives from the error trigger payload\n// Avoid deep-walking raw n8n objects which trigger sandbox env var guards\nconst raw = $input.first()?.json || {};\n\n// Safely read nested values using optional chaining on plain copies\nconst safeStr = (val) => (typeof val === 'string' ? val : null);\nconst safeObj = (val) => {\n  if (!val || typeof val !== 'object') return {};\n  try { return JSON.parse(JSON.stringify(val)); } catch { return {}; }\n};\n\nconst event = safeObj(raw);\nconst workflowMeta = event.workflow || {};\nconst executionMeta = event.execution || {};\nconst errorMeta = executionMeta.error || {};\n\nconst now = new Date();\nconst processedAt = now.toISOString();\nconst workflowId = safeStr(workflowMeta.id) || safeStr(executionMeta.workflowId) || 'unknown_workflow';\nconst workflowName = safeStr(workflowMeta.name) || 'Unknown Workflow';\nconst lastNode = safeStr(executionMeta.lastNodeExecuted) || null;\nconst errorMessage = safeStr(errorMeta.message) || safeStr(errorMeta.description) || 'Unknown execution error';\n\nconst payload = {\n  received_date: null,\n  provider: null,\n  provider_contact: { name: null, company: null, phone: null, email: null },\n  owner: null,\n  address: { country: 'Austria', postal_code: null, city: null, street: null, house_number: null },\n  areas: { usable_area_m2: null, plot_area_m2: null },\n  financials: {\n    target_rent_pa_eur: null, actual_rent_pa_eur: null, asking_price_eur: null,\n    price_per_m2_usable_area: null, price_per_m2_land: null,\n  },\n  property: {\n    property_type: null, ownership_type: null, construction_year: null,\n    heritage_protection: null, vacancy: null, parking_spaces: null,\n  },\n  returns: { gross_initial_yield_actual: null, gross_initial_yield_target: null },\n  notes: 'Workflow failure captured by BIG error handler.',\n  location_enrichment: {\n    latitude: null, longitude: null, aerial_image_url: null, location_description: null,\n    public_transport_access: null, distance_city_center_min: null,\n    distance_train_station_min: null, distance_airport_min: null, infrastructure: [],\n  },\n  market_context: {\n    potential_revenue: null,\n    demographics: { population_development: null, purchasing_power: null },\n  },\n  processing_metadata: {\n    document_id: 'error_' + workflowId + '_' + String(now.getTime()),\n    source_filename: null,\n    ingestion_channel: null,\n    processed_at: processedAt,\n    status: 'failed',\n    validation_errors: [\n      'workflow:' + workflowName,\n      lastNode ? 'last_node:' + lastNode : null,\n      'error:' + errorMessage,\n    ].filter(Boolean),\n  },\n  _runtime: {\n    persist_result: true,\n    persistence_mode: 'postgres',\n    alert_url: null,\n    alert_marker: null,\n  },\n};\n\nreturn [{ json: payload }];"
+      },
+      "id": "build-failure-payload",
+      "name": "Build Failure Payload",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        448,
+        304
+      ]
+    },
+    {
+      "parameters": {
+        "workflowId": {
+          "mode": "list",
+          "value": "65EivHdogEPu9MUF",
+          "cachedResultName": "BIG - Expose Persistence"
+        },
+        "mode": "each",
+        "options": {
+          "waitForSubWorkflow": true
+        }
+      },
+      "id": "persist-failure-context",
+      "name": "Persist Failure Context",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.3,
+      "position": [
+        672,
+        304
+      ]
+    },
+    {
+      "parameters": {},
+      "id": "error-handler-complete",
+      "name": "Error Handler Complete",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        1344,
+        304
+      ]
+    },
+    {
+      "parameters": {
+        "content": "## README\n- Owner: Richard Berenczei / richard.berenczei@pwc.com\n- Dependencies: BIG - Expose Persistence sub-workflow, optional alert webhook endpoint\n- Logic Summary: Capture hard workflow failures, persist failure context, and optionally alert operators without losing debugging detail.",
+        "height": 124,
+        "width": 944,
+        "color": 7
+      },
+      "id": "635f2ac0-cd83-4b55-a2fb-e8d688ae1f2d",
+      "name": "README",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -208,
+        -48
+      ]
+    },
+    {
+      "parameters": {
+        "content": "## Trigger / Input\n\nBlue section: subscribe to workflow-level failures and convert raw execution metadata into a standardized failure payload.",
+        "height": 304,
+        "width": 504,
+        "color": 5
+      },
+      "id": "9dd67716-f226-45cb-a80a-511df28d02e4",
+      "name": "Failure Intake",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        80,
+        160
+      ]
+    },
+    {
+      "parameters": {
+        "content": "## Error / Recovery\nRed section: persist failure context, branch on alert configuration, and notify operators when escalation is enabled.",
+        "height": 304,
+        "width": 696,
+        "color": 3
+      },
+      "id": "b1ae6477-5e26-470a-989a-ebc23ca2f186",
+      "name": "Recovery Path",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        592,
+        160
+      ]
+    },
+    {
+      "parameters": {
+        "content": "## Success Path\nTerminate error handling cleanly once persistence and optional notifications are complete.",
+        "height": 304,
+        "width": 288,
+        "color": 4
+      },
+      "id": "e9b70cc1-f0a0-4da6-9dd4-bc6729ec651a",
+      "name": "Completion",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        1296,
+        160
+      ]
+    },
+    {
+      "parameters": {
+        "sendTo": "berenczeijr@gmail.com",
+        "subject": "=🚨 BIG Pipeline Error: {{ $json.processing_metadata.validation_errors[0] || 'Unknown workflow' }}",
+        "message": "=<html><body style=\"font-family:Arial,sans-serif;margin:0;padding:20px;background:#f5f5f5;\"><div style=\"max-width:600px;margin:0 auto;background:#fff;border-radius:8px;overflow:hidden;box-shadow:0 2px 8px rgba(0,0,0,0.1);\"><div style=\"background:#d32f2f;padding:20px 25px;\"><h1 style=\"color:#fff;margin:0;font-size:20px;\">🚨 BIG Expose Pipeline Error</h1></div><div style=\"padding:25px;\"><table style=\"width:100%;border-collapse:collapse;\"><tr><td style=\"padding:8px 0;color:#666;width:140px;\">Workflow</td><td style=\"padding:8px 0;font-weight:600;\">{{ $json.processing_metadata.validation_errors[0] || 'Unknown' }}</td></tr><tr><td style=\"padding:8px 0;color:#666;\">Failed Node</td><td style=\"padding:8px 0;\">{{ $json.processing_metadata.validation_errors[1] || 'Unknown' }}</td></tr><tr><td style=\"padding:8px 0;color:#666;\">Error</td><td style=\"padding:8px 0;color:#d32f2f;\">{{ $json.processing_metadata.validation_errors[2] || 'Unknown error' }}</td></tr><tr><td style=\"padding:8px 0;color:#666;\">Timestamp</td><td style=\"padding:8px 0;\">{{ $json.processing_metadata.processed_at }}</td></tr><tr><td style=\"padding:8px 0;color:#666;\">Document ID</td><td style=\"padding:8px 0;font-family:monospace;font-size:12px;\">{{ $json.processing_metadata.document_id }}</td></tr></table></div><div style=\"padding:15px 25px;background:#f9f9f9;border-top:1px solid #eee;\"><p style=\"margin:0;font-size:12px;color:#999;\">This alert was sent by the BIG Expose Error Handler. Check the n8n execution log for full details.</p></div></div></body></html>",
+        "options": {
+          "appendAttribution": false
+        }
+      },
+      "id": "0660b06d-ac1b-4322-a12c-84d89b30e7bc",
+      "name": "Send Error Email",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.2,
+      "position": [
+        1024,
+        304
+      ],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 5000,
+      "webhookId": "d559bf30-6258-487b-a2a3-56b63596cad6",
+      "onError": "continueRegularOutput"
+    }
+  ],
+  "connections": {
+    "Error Trigger": {
+      "main": [
+        [
+          {
+            "node": "Build Failure Payload",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Failure Payload": {
+      "main": [
+        [
+          {
+            "node": "Persist Failure Context",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Persist Failure Context": {
+      "main": [
+        [
+          {
+            "node": "Send Error Email",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send Error Email": {
+      "main": [
+        [
+          {
+            "node": "Error Handler Complete",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "callerPolicy": "workflowsFromSameOwner",
+    "availableInMCP": false
+  },
+  "pinData": {},
+  "tags": [
+    "BIG",
+    "Lifecycle: Production",
+    "Type: Utility"
+  ]
+}
