@@ -1,0 +1,180 @@
+{
+  "id": "65EivHdogEPu9MUF",
+  "name": "BIG - Expose Persistence",
+  "nodes": [
+    {
+      "parameters": {
+        "inputSource": "passthrough"
+      },
+      "id": "persistence-trigger",
+      "name": "Receive Structured Payload",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1.1,
+      "position": [
+        272,
+        304
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const items = $input.all();\n\nreturn items.map((item) => {\n  const payload = JSON.parse(JSON.stringify(item.json || {}));\n  const cleanPayload = JSON.parse(JSON.stringify(payload));\n  delete cleanPayload._runtime;\n\n  return {\n    json: {\n      document_id: cleanPayload.processing_metadata?.document_id ?? null,\n      source_filename: cleanPayload.processing_metadata?.source_filename ?? null,\n      ingestion_channel: cleanPayload.processing_metadata?.ingestion_channel ?? null,\n      status: cleanPayload.processing_metadata?.status ?? null,\n      received_date: cleanPayload.received_date ?? null,\n      processed_at: cleanPayload.processing_metadata?.processed_at ?? null,\n      payload_jsonb: cleanPayload,\n      validation_errors_jsonb: Array.isArray(cleanPayload.processing_metadata?.validation_errors)\n        ? cleanPayload.processing_metadata.validation_errors\n        : [],\n    },\n  };\n});"
+      },
+      "id": "prepare-persistence-payload",
+      "name": "Prepare Persistence Payload",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        496,
+        304
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "upsert",
+        "schema": {
+          "mode": "name",
+          "value": "public"
+        },
+        "table": {
+          "mode": "name",
+          "value": "real_estate_extractions"
+        },
+        "options": {
+          "queryBatching": "single",
+          "largeNumbersOutput": "numbers",
+          "replaceEmptyStrings": true
+        },
+        "columnToMatchOn": "document_id",
+        "columns": {
+          "mappingMode": "autoMapInputData",
+          "matchingColumns": [
+            "document_id"
+          ]
+        }
+      },
+      "id": "upsert-extraction-record",
+      "name": "Upsert Extraction Record",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        720,
+        304
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "8kAoaYBVjLxUvCWQ",
+          "name": "BIG Postgres"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "const items = $input.all();\nconst dbResult = items[0]?.json || {};\n\n// Get the original payload passed into this sub-workflow\nlet originalPayload = {};\ntry {\n  originalPayload = JSON.parse(JSON.stringify(($('Receive Structured Payload').first()?.json) || {}));\n} catch (e) {\n  // Fallback: reconstruct from DB result if cross-node reference fails\n  originalPayload = dbResult.payload_jsonb || dbResult || {};\n}\n\nconst runtime = originalPayload._runtime && typeof originalPayload._runtime === 'object' ? originalPayload._runtime : {};\n\noriginalPayload._runtime = {\n  ...runtime,\n  persistence_attempted: true,\n  persistence_error: dbResult.error?.message || dbResult.error || null,\n};\n\nreturn [{ json: originalPayload }];"
+      },
+      "id": "Return Persistence Result",
+      "name": "Return Persistence Result",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        944,
+        304
+      ]
+    },
+    {
+      "parameters": {
+        "content": "## README\n- Owner: Richard Berenczei / richard.berenczei@pwc.com\n- Dependencies: Postgres credential, real_estate_extractions table\n- Logic Summary: Prepare the canonical JSON payload for storage and upsert it into Postgres without leaking runtime helper fields.",
+        "height": 220,
+        "width": 908,
+        "color": 7
+      },
+      "id": "eea46aa5-217c-4e03-aab7-880a972fa24c",
+      "name": "README",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        16,
+        -96
+      ]
+    },
+    {
+      "parameters": {
+        "content": "## Trigger / Input\nBlue section: receive the final structured payload from the core workflow and prepare DB-safe fields.",
+        "height": 284,
+        "width": 284,
+        "color": 5
+      },
+      "id": "a6201575-cfb3-4e3d-a8f5-1f0a28ea3040",
+      "name": "Persistence Input",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        176,
+        176
+      ]
+    },
+    {
+      "parameters": {
+        "content": "## Success Path\nGreen section: upsert the extraction record and return the original payload for downstream continuity.",
+        "height": 284,
+        "width": 656,
+        "color": 4
+      },
+      "id": "81b69a01-4f61-4284-8667-5f7ab10eb95b",
+      "name": "DB Upsert",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        464,
+        176
+      ]
+    }
+  ],
+  "connections": {
+    "Receive Structured Payload": {
+      "main": [
+        [
+          {
+            "node": "Prepare Persistence Payload",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Persistence Payload": {
+      "main": [
+        [
+          {
+            "node": "Upsert Extraction Record",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Upsert Extraction Record": {
+      "main": [
+        [
+          {
+            "node": "Return Persistence Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "callerPolicy": "workflowsFromSameOwner",
+    "availableInMCP": false,
+    "errorWorkflow": "PIlbEFexoMxalpwB"
+  },
+  "pinData": {},
+  "tags": [
+    "BIG",
+    "Lifecycle: Production",
+    "Type: Utility"
+  ]
+}
