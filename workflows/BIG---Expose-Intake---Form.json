@@ -1,0 +1,167 @@
+{
+  "id": "i47lLprbx3UMXxew",
+  "name": "BIG - Expose Intake - Form",
+  "nodes": [
+    {
+      "parameters": {
+        "formTitle": "BIG Real Estate Expose Intake",
+        "formDescription": "Upload a real estate exposé PDF to extract structured property data and location enrichment.",
+        "formFields": {
+          "values": [
+            {
+              "fieldLabel": "Expose PDF",
+              "fieldType": "file",
+              "acceptFileTypes": ".pdf",
+              "requiredField": true
+            },
+            {
+              "fieldLabel": "Duplicate Mode",
+              "fieldType": "dropdown",
+              "fieldOptions": {
+                "values": [
+                  {
+                    "option": "overwrite"
+                  },
+                  {
+                    "option": "skip"
+                  },
+                  {
+                    "option": "reprocess"
+                  }
+                ]
+              }
+            }
+          ]
+        },
+        "responseMode": "lastNode",
+        "options": {}
+      },
+      "id": "form-trigger",
+      "name": "Expose Upload Form",
+      "type": "n8n-nodes-base.formTrigger",
+      "typeVersion": 2.5,
+      "position": [
+        240,
+        320
+      ],
+      "webhookId": "9e793bb9-2639-491d-a1e2-bc8b0276d1f7"
+    },
+    {
+      "parameters": {
+        "jsCode": "var inputItem = $input.first() || {};\nvar sourceJson = inputItem.json || {};\nvar sourceBinary = inputItem.binary || {};\nvar binaryKeys = Object.keys(sourceBinary);\nvar pdfKey = null;\nfor (var index = 0; index < binaryKeys.length; index += 1) {\n  var file = sourceBinary[binaryKeys[index]] || {};\n  var fileName = String(file.fileName || '').toLowerCase();\n  var mimeType = String(file.mimeType || '').toLowerCase();\n  if (mimeType === 'application/pdf' || fileName.endsWith('.pdf')) {\n    pdfKey = binaryKeys[index];\n    break;\n  }\n}\nif (!pdfKey) {\n  throw new Error('The form submission did not include a PDF file.');\n}\nvar duplicateMode = String(sourceJson['Duplicate Mode'] || sourceJson.duplicate_mode || 'overwrite').toLowerCase();\nif (['skip', 'overwrite', 'reprocess'].indexOf(duplicateMode) === -1) {\n  duplicateMode = 'overwrite';\n}\nvar submittedAt = sourceJson.submittedAt || sourceJson.submitted_at || null;\nreturn [{\n  json: {\n    source_filename: sourceBinary[pdfKey].fileName || 'form-upload.pdf',\n    ingestion_channel: 'form',\n    received_date: submittedAt,\n    duplicate_mode: duplicateMode,\n    persist_result: true,\n    persistence_mode: 'postgres'\n  },\n  binary: {\n    pdf: sourceBinary[pdfKey]\n  }\n}];"
+      },
+      "id": "normalize-form",
+      "name": "Normalize Form Submission",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        464,
+        320
+      ]
+    },
+    {
+      "parameters": {
+        "workflowId": {
+          "mode": "list",
+          "value": "ovWVru7z6KmBhaig",
+          "cachedResultName": "BIG - Expose Processing Core"
+        },
+        "mode": "each",
+        "options": {
+          "waitForSubWorkflow": true
+        }
+      },
+      "id": "execute-core",
+      "name": "Run Expose Processing Core",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.3,
+      "position": [
+        688,
+        320
+      ]
+    },
+    {
+      "parameters": {
+        "content": "## README\n- Owner: Richard Berenczei / richard.berenczei@pwc.com\n- Dependencies: Form Trigger, BIG - Expose Processing Core sub-workflow\n- Logic Summary: Accept a manual PDF upload, normalize the payload, and hand off to the shared extraction core.",
+        "height": 124,
+        "width": 804,
+        "color": 7
+      },
+      "id": "3f014940-2cf1-440e-8f1e-a6481d47b166",
+      "name": "README",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -176,
+        -64
+      ]
+    },
+    {
+      "parameters": {
+        "content": "## Trigger / Input\nBlue section: operator-facing upload entry point for ad hoc processing and smoke tests.",
+        "height": 316,
+        "color": 5
+      },
+      "id": "237e6594-8444-4fcf-a61c-e0a4b631fb34",
+      "name": "Trigger & Input",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        176,
+        176
+      ]
+    },
+    {
+      "parameters": {
+        "content": "## Success Path\nGreen section: normalize uploaded form data into the shared contract and dispatch to the processing core.",
+        "height": 316,
+        "width": 456,
+        "color": 4
+      },
+      "id": "7441449a-0398-4c0b-8f80-eb960f4ccca6",
+      "name": "Normalization & Handoff",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        416,
+        176
+      ]
+    }
+  ],
+  "connections": {
+    "Expose Upload Form": {
+      "main": [
+        [
+          {
+            "node": "Normalize Form Submission",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalize Form Submission": {
+      "main": [
+        [
+          {
+            "node": "Run Expose Processing Core",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "errorWorkflow": "PIlbEFexoMxalpwB",
+    "callerPolicy": "workflowsFromSameOwner",
+    "availableInMCP": false
+  },
+  "pinData": {},
+  "tags": [
+    "BIG",
+    "Lifecycle: Production",
+    "Type: Trigger"
+  ]
+}
