@@ -143,8 +143,8 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        1888,
-        400
+        1904,
+        384
       ]
     },
     {
@@ -199,7 +199,7 @@
       "parameters": {
         "content": "## Success Path (continued)\nGreen section: check if each file already exists on GitHub (to get its SHA for updates), build commit messages with version metadata, push via GitHub Contents API, and aggregate a backup summary.",
         "height": 496,
-        "width": 980,
+        "width": 1044,
         "color": 4
       },
       "id": "github-section-note",
