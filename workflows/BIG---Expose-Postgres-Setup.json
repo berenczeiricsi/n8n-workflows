@@ -94,7 +94,7 @@
       "parameters": {
         "content": "## Success Path\nGreen section: create required tables and validate that persisted extraction rows can be queried successfully.",
         "height": 284,
-        "width": 472,
+        "width": 520,
         "color": 4
       },
       "id": "58d46acf-0041-4b9d-9997-c685ec950caa",
