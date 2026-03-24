@@ -1,0 +1,146 @@
+{
+  "id": "Yl9sWiQKfyJqc3Zl",
+  "name": "BIG - Expose Postgres Setup",
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "manual-trigger",
+      "name": "Run Setup Manually",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        240,
+        304
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "create table if not exists public.real_estate_extractions (\n  document_id text primary key,\n  source_filename text,\n  ingestion_channel text,\n  status text,\n  received_date date,\n  processed_at timestamptz,\n  payload_jsonb jsonb not null,\n  validation_errors_jsonb jsonb not null default '[]'::jsonb\n);\n\ncreate index if not exists real_estate_extractions_status_idx\n  on public.real_estate_extractions (status);\n\ncreate index if not exists real_estate_extractions_processed_at_idx\n  on public.real_estate_extractions (processed_at desc);",
+        "options": {
+          "queryBatching": "single",
+          "largeNumbersOutput": "numbers",
+          "replaceEmptyStrings": true
+        }
+      },
+      "id": "create-table",
+      "name": "Create Extraction Table",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        464,
+        304
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "8kAoaYBVjLxUvCWQ",
+          "name": "BIG Postgres"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "select\n  document_id,\n  payload_jsonb\nfrom public.real_estate_extractions\nwhere document_id = 'bee264d1ffaf9cc4338b795d1d0e58a4d8c6783c87cd370f2694067cdf33b7b0';",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        688,
+        304
+      ],
+      "id": "210807f0-cd25-47bd-965c-3448ada3a1a2",
+      "name": "Verify Stored Payload",
+      "credentials": {
+        "postgres": {
+          "id": "8kAoaYBVjLxUvCWQ",
+          "name": "BIG Postgres"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "content": "## README\n- Owner: Richard Berenczei / richard.berenczei@pwc.com\n- Dependencies: Postgres credential with DDL rights\n- Logic Summary: Bootstrap the extraction table and provide a quick DB verification utility for operators.",
+        "height": 200,
+        "width": 724,
+        "color": 7
+      },
+      "id": "b1014602-3877-4a83-9d32-69013214e65c",
+      "name": "README",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -128,
+        -80
+      ]
+    },
+    {
+      "parameters": {
+        "content": "## Trigger / Input\nBlue section: run this utility manually when provisioning or checking the database layer.",
+        "height": 284,
+        "color": 5
+      },
+      "id": "a7d8ad08-6f0a-437e-94b7-a74a1a77ac42",
+      "name": "Manual Utility",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        160,
+        176
+      ]
+    },
+    {
+      "parameters": {
+        "content": "## Success Path\nGreen section: create required tables and validate that persisted extraction rows can be queried successfully.",
+        "height": 284,
+        "width": 472,
+        "color": 4
+      },
+      "id": "58d46acf-0041-4b9d-9997-c685ec950caa",
+      "name": "DDL & Verification",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        400,
+        176
+      ]
+    }
+  ],
+  "connections": {
+    "Run Setup Manually": {
+      "main": [
+        [
+          {
+            "node": "Create Extraction Table",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create Extraction Table": {
+      "main": [
+        [
+          {
+            "node": "Verify Stored Payload",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "callerPolicy": "workflowsFromSameOwner",
+    "availableInMCP": false,
+    "errorWorkflow": "PIlbEFexoMxalpwB"
+  },
+  "pinData": {},
+  "tags": [
+    "BIG",
+    "Lifecycle: Production",
+    "Type: Utility"
+  ]
+}
