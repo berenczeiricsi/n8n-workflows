@@ -1,0 +1,718 @@
+{
+  "id": "ovWVru7z6KmBhaig",
+  "name": "BIG - Expose Processing Core",
+  "nodes": [
+    {
+      "parameters": {
+        "inputSource": "passthrough"
+      },
+      "id": "core-trigger-v2",
+      "name": "Receive Intake Payload",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1.1,
+      "position": [
+        208,
+        704
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const items = $input.all();\nconst results = [];\n\nfor (const item of items) {\n  const binary = item.binary || {};\n  const binaryKeys = Object.keys(binary);\n  if (!binaryKeys.length) {\n    throw new Error('No PDF binary payload was provided to the processing core.');\n  }\n\n  let pdfKey = 'pdf';\n  if (!binary[pdfKey]) {\n    for (const key of binaryKeys) {\n      const file = binary[key] || {};\n      const fileName = String(file.fileName || '').toLowerCase();\n      const mimeType = String(file.mimeType || '').toLowerCase();\n      if (mimeType === 'application/pdf' || fileName.endsWith('.pdf')) {\n        pdfKey = key;\n        break;\n      }\n    }\n    if (!binary[pdfKey]) {\n      pdfKey = binaryKeys[0];\n    }\n  }\n\n  const pdf = binary[pdfKey];\n  const sourceJson = item.json || {};\n  const rawReceivedDate = sourceJson.received_date || sourceJson.receivedDate || null;\n  let receivedDate = null;\n  if (rawReceivedDate != null && rawReceivedDate !== '') {\n    const str = String(rawReceivedDate).trim();\n    const iso = str.match(/^(\\d{4})-(\\d{2})-(\\d{2})/);\n    const dmy = str.match(/^(\\d{1,2})[./-](\\d{1,2})[./-](\\d{2,4})$/);\n    const monthYear = str.match(/^(\\d{1,2})[./-](\\d{4})$/);\n    if (iso) {\n      receivedDate = iso[1] + '-' + iso[2] + '-' + iso[3];\n    } else if (dmy) {\n      const year = dmy[3].length === 2 ? '20' + dmy[3] : dmy[3];\n      receivedDate = year + '-' + dmy[2].padStart(2, '0') + '-' + dmy[1].padStart(2, '0');\n    } else if (monthYear) {\n      receivedDate = monthYear[2] + '-' + monthYear[1].padStart(2, '0') + '-01';\n    } else {\n      const dateValue = new Date(str);\n      if (!Number.isNaN(dateValue.getTime())) {\n        receivedDate = dateValue.toISOString().slice(0, 10);\n      }\n    }\n  }\n  if (!receivedDate) {\n    receivedDate = new Date().toISOString().slice(0, 10);\n  }\n\n  const duplicateMode = ['skip', 'overwrite', 'reprocess'].includes(sourceJson.duplicate_mode)\n    ? sourceJson.duplicate_mode\n    : 'overwrite';\n  const persistenceMode = sourceJson.persistence_mode === 'none' ? 'none' : 'postgres';\n  const persistResult = !(sourceJson.persist_result === false || sourceJson.persist_result === 'false');\n  const ingestionChannel = ['form', 'webhook', 'email'].includes(sourceJson.ingestion_channel)\n    ? sourceJson.ingestion_channel\n    : 'manual';\n\n  results.push({\n    json: {\n      source_filename: sourceJson.source_filename || pdf.fileName || 'unknown.pdf',\n      ingestion_channel: ingestionChannel,\n      received_date: receivedDate,\n      duplicate_mode: duplicateMode,\n      persist_result: persistResult,\n      persistence_mode: persistenceMode,\n    },\n    binary: { pdf },\n  });\n}\n\nreturn results;"
+      },
+      "id": "normalize-intake-v2",
+      "name": "Normalize Intake Payload",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        432,
+        704
+      ]
+    },
+    {
+      "parameters": {
+        "binaryData": true,
+        "binaryPropertyName": "pdf",
+        "dataPropertyName": "document_hash"
+      },
+      "id": "hash-source-pdf-v2",
+      "name": "Hash Source PDF",
+      "type": "n8n-nodes-base.crypto",
+      "typeVersion": 2,
+      "position": [
+        656,
+        704
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const items = $input.all();\nconst normalizedItems = $('Normalize Intake Payload').all();\n\nreturn items.map((item, index) => {\n  const source = item.json || {};\n  const normalizedItem = normalizedItems[index] || normalizedItems[0] || {};\n  const sourceBinary = (item.binary && Object.keys(item.binary).length > 0)\n    ? item.binary\n    : (normalizedItem.binary || {});\n\n  return {\n    json: {\n      received_date: source.received_date || null,\n      provider: null,\n      provider_contact: {\n        name: null,\n        company: null,\n        phone: null,\n        email: null,\n      },\n      owner: null,\n      address: {\n        country: 'Austria',\n        postal_code: null,\n        city: null,\n        street: null,\n        house_number: null,\n      },\n      areas: {\n        usable_area_m2: null,\n        plot_area_m2: null,\n      },\n      financials: {\n        target_rent_pa_eur: null,\n        actual_rent_pa_eur: null,\n        asking_price_eur: null,\n        price_per_m2_usable_area: null,\n        price_per_m2_land: null,\n      },\n      property: {\n        property_type: null,\n        ownership_type: null,\n        construction_year: null,\n        heritage_protection: null,\n        vacancy: null,\n        parking_spaces: null,\n      },\n      returns: {\n        gross_initial_yield_actual: null,\n        gross_initial_yield_target: null,\n      },\n      notes: null,\n      location_enrichment: {\n        latitude: null,\n        longitude: null,\n        aerial_image_url: null,\n        location_description: null,\n        public_transport_access: null,\n        distance_city_center_min: null,\n        distance_train_station_min: null,\n        distance_airport_min: null,\n        infrastructure: [],\n      },\n      market_context: {\n        potential_revenue: null,\n        demographics: {\n          population_development: null,\n          purchasing_power: null,\n        },\n      },\n      processing_metadata: {\n        document_id: source.document_hash || null,\n        source_filename: source.source_filename || null,\n        ingestion_channel: source.ingestion_channel || null,\n        processed_at: null,\n        status: 'pending',\n        validation_errors: [],\n      },\n      _runtime: {\n        duplicate_mode: source.duplicate_mode || 'overwrite',\n        persist_result: source.persist_result !== false,\n        persistence_mode: source.persistence_mode || 'postgres',\n        duplicate_lookup_requested: source.persist_result !== false && source.persistence_mode !== 'none' ? 1 : null,\n        duplicate_found: false,\n        reuse_existing_marker: null,\n        reused_payload: null,\n        duplicate_lookup_error: null,\n        extracted_text: null,\n        expose_location_description: null,\n        ai_error: null,\n        enrichment_failed: false,\n        persistence_error: null,\n        persist_result_marker: null,\n      },\n    },\n    binary: sourceBinary,\n  };\n});"
+      },
+      "id": "initialize-context-v2",
+      "name": "Initialize Extraction Context",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        880,
+        704
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "WITH existing AS ( SELECT payload_jsonb, status FROM real_estate_extractions WHERE document_id = $1 LIMIT 1 ) SELECT true AS found, payload_jsonb, status FROM existing UNION ALL SELECT false AS found, NULL::jsonb AS payload_jsonb, NULL::text AS status WHERE NOT EXISTS (SELECT 1 FROM existing);",
+        "options": {
+          "queryBatching": "single",
+          "queryReplacement": "={{ [$json.processing_metadata.document_id] }}",
+          "largeNumbersOutput": "numbers",
+          "replaceEmptyStrings": true
+        }
+      },
+      "id": "lookup-existing-v2",
+      "name": "Lookup Existing Extraction",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        1328,
+        624
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "8kAoaYBVjLxUvCWQ",
+          "name": "BIG Postgres"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "const baseItem = $('Initialize Extraction Context').first();\nconst base = JSON.parse(JSON.stringify(baseItem.json || {}));\nconst binary = baseItem.binary || {};\nconst lookupItem = $input.first();\nconst lookup = lookupItem ? (lookupItem.json || {}) : {};\nconst runtime = base._runtime && typeof base._runtime === 'object' ? base._runtime : {};\n\nif (lookup.error) {\n  runtime.duplicate_lookup_error = lookup.error.message || String(lookup.error);\n}\n\nif (runtime.persist_result && runtime.persistence_mode === 'postgres' && lookup.found === true) {\n  runtime.duplicate_found = true;\n}\n\nif (runtime.persist_result && runtime.persistence_mode === 'postgres' && runtime.duplicate_mode === 'skip' && lookup.found === true && lookup.payload_jsonb) {\n  let reusedPayload = lookup.payload_jsonb;\n  if (typeof reusedPayload === 'string') {\n    reusedPayload = JSON.parse(reusedPayload);\n  }\n  if (!reusedPayload.processing_metadata || typeof reusedPayload.processing_metadata !== 'object') {\n    reusedPayload.processing_metadata = {};\n  }\n  if (!Array.isArray(reusedPayload.processing_metadata.validation_errors)) {\n    reusedPayload.processing_metadata.validation_errors = [];\n  }\n  reusedPayload.processing_metadata.status = 'duplicate_skipped';\n  runtime.reuse_existing_marker = 1;\n  runtime.reused_payload = reusedPayload;\n}\n\nbase._runtime = runtime;\nreturn [{ json: base, binary }];"
+      },
+      "id": "resolve-duplicate-v2",
+      "name": "Resolve Duplicate Strategy",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1552,
+        720
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "version": 2,
+            "leftValue": "",
+            "caseSensitive": true,
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "reuse-existing-marker",
+              "leftValue": "={{ !!$json._runtime.reuse_existing_marker }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "reuse-existing-v2",
+      "name": "Reuse Existing Extraction?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        1776,
+        720
+      ],
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "var inputItem = $input.first() || {};\nvar currentJson = inputItem.json || {};\nvar payload = JSON.parse(JSON.stringify((currentJson._runtime && currentJson._runtime.reused_payload) || {}));\nif (!payload.processing_metadata || typeof payload.processing_metadata !== 'object') {\n  payload.processing_metadata = {};\n}\nif (!Array.isArray(payload.processing_metadata.validation_errors)) {\n  payload.processing_metadata.validation_errors = [];\n}\npayload.processing_metadata.status = 'duplicate_skipped';\nreturn [{ json: payload }];"
+      },
+      "id": "return-reused-v2",
+      "name": "Return Reused Payload",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3824,
+        480
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "pdf",
+        "binaryPropertyName": "pdf",
+        "options": {
+          "joinPages": true,
+          "keepSource": true
+        }
+      },
+      "id": "extract-pdf-text-v2",
+      "name": "Extract PDF Text",
+      "type": "n8n-nodes-base.extractFromFile",
+      "typeVersion": 1.1,
+      "position": [
+        2000,
+        800
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const payload = JSON.parse(JSON.stringify($input.first().json || {}));\nconst candidate = JSON.parse(JSON.stringify(payload));\ndelete candidate._runtime;\n\nconst nullableString = { type: ['string', 'null'] };\nconst nullableNumber = { type: ['number', 'null'] };\nconst nullableBoolean = { type: ['boolean', 'null'] };\nconst infrastructureItem = {\n  type: 'object',\n  additionalProperties: false,\n  required: ['category', 'name', 'address', 'rating'],\n  properties: {\n    category: nullableString,\n    name: nullableString,\n    address: nullableString,\n    rating: nullableNumber,\n  },\n};\n\nconst schema = {\n  type: 'object',\n  additionalProperties: false,\n  required: [\n    'received_date',\n    'provider',\n    'provider_contact',\n    'owner',\n    'address',\n    'areas',\n    'financials',\n    'property',\n    'returns',\n    'notes',\n    'location_enrichment',\n    'market_context',\n    'processing_metadata',\n  ],\n  properties: {\n    received_date: nullableString,\n    provider: nullableString,\n    provider_contact: {\n      type: 'object',\n      additionalProperties: false,\n      required: ['name', 'company', 'phone', 'email'],\n      properties: {\n        name: nullableString,\n        company: nullableString,\n        phone: nullableString,\n        email: nullableString,\n      },\n    },\n    owner: nullableString,\n    address: {\n      type: 'object',\n      additionalProperties: false,\n      required: ['country', 'postal_code', 'city', 'street', 'house_number'],\n      properties: {\n        country: nullableString,\n        postal_code: nullableString,\n        city: nullableString,\n        street: nullableString,\n        house_number: nullableString,\n      },\n    },\n    areas: {\n      type: 'object',\n      additionalProperties: false,\n      required: ['usable_area_m2', 'plot_area_m2'],\n      properties: {\n        usable_area_m2: nullableNumber,\n        plot_area_m2: nullableNumber,\n      },\n    },\n    financials: {\n      type: 'object',\n      additionalProperties: false,\n      required: ['target_rent_pa_eur', 'actual_rent_pa_eur', 'asking_price_eur', 'price_per_m2_usable_area', 'price_per_m2_land'],\n      properties: {\n        target_rent_pa_eur: nullableNumber,\n        actual_rent_pa_eur: nullableNumber,\n        asking_price_eur: nullableNumber,\n        price_per_m2_usable_area: nullableNumber,\n        price_per_m2_land: nullableNumber,\n      },\n    },\n    property: {\n      type: 'object',\n      additionalProperties: false,\n      required: ['property_type', 'ownership_type', 'construction_year', 'heritage_protection', 'vacancy', 'parking_spaces'],\n      properties: {\n        property_type: nullableString,\n        ownership_type: nullableString,\n        construction_year: nullableNumber,\n        heritage_protection: nullableBoolean,\n        vacancy: nullableNumber,\n        parking_spaces: nullableNumber,\n      },\n    },\n    returns: {\n      type: 'object',\n      additionalProperties: false,\n      required: ['gross_initial_yield_actual', 'gross_initial_yield_target'],\n      properties: {\n        gross_initial_yield_actual: nullableNumber,\n        gross_initial_yield_target: nullableNumber,\n      },\n    },\n    notes: nullableString,\n    location_enrichment: {\n      type: 'object',\n      additionalProperties: false,\n      required: ['latitude', 'longitude', 'aerial_image_url', 'location_description', 'public_transport_access', 'distance_city_center_min', 'distance_train_station_min', 'distance_airport_min', 'infrastructure'],\n      properties: {\n        latitude: nullableNumber,\n        longitude: nullableNumber,\n        aerial_image_url: nullableString,\n        location_description: nullableString,\n        public_transport_access: nullableString,\n        distance_city_center_min: nullableNumber,\n        distance_train_station_min: nullableNumber,\n        distance_airport_min: nullableNumber,\n        infrastructure: {\n          type: 'array',\n          items: infrastructureItem,\n        },\n      },\n    },\n    market_context: {\n      type: 'object',\n      additionalProperties: false,\n      required: ['potential_revenue', 'demographics'],\n      properties: {\n        potential_revenue: nullableString,\n        demographics: {\n          type: 'object',\n          additionalProperties: false,\n          required: ['population_development', 'purchasing_power'],\n          properties: {\n            population_development: nullableString,\n            purchasing_power: nullableString,\n          },\n        },\n      },\n    },\n    processing_metadata: {\n      type: 'object',\n      additionalProperties: false,\n      required: ['document_id', 'source_filename', 'ingestion_channel', 'processed_at', 'status', 'validation_errors'],\n      properties: {\n        document_id: nullableString,\n        source_filename: nullableString,\n        ingestion_channel: nullableString,\n        processed_at: nullableString,\n        status: nullableString,\n        validation_errors: {\n          type: 'array',\n          items: { type: 'string' },\n        },\n      },\n    },\n  },\n};\n\nconst systemPrompt = [\n  'You normalize Austrian and German real estate expose text into a strict JSON object.',\n  'Use the provided deterministic candidate values when they appear correct and only fill missing or ambiguous fields.',\n  'Return null for anything not present.',\n  'Do not add fields, comments, markdown, or explanations.',\n  'Do not compute derived fields such as price_per_m2_* or gross_initial_yield_* unless explicitly stated in the document. Leave them null if they are not directly stated.',\n  'Keep enums exactly as provided for property_type and ownership_type.',\n].join(' ');\n\nconst documentText = String(payload._runtime && payload._runtime.extracted_text ? payload._runtime.extracted_text : '').slice(0, 60000);\nconst candidateJson = JSON.stringify(candidate, null, 2).slice(0, 20000);\n\npayload.openai_request_body = {\n  model: 'gpt-4.1-mini',\n  temperature: 0,\n  input: [\n    {\n      role: 'system',\n      content: [\n        {\n          type: 'input_text',\n          text: systemPrompt,\n        },\n      ],\n    },\n    {\n      role: 'user',\n      content: [\n        {\n          type: 'input_text',\n          text: [\n            'Map the exposé into the target schema and only improve missing or ambiguous values.',\n            'Document text:',\n            documentText,\n            '',\n            'Deterministic candidate JSON:',\n            candidateJson,\n          ].join('\\n'),\n        },\n      ],\n    },\n  ],\n  text: {\n    format: {\n      type: 'json_schema',\n      name: 'real_estate_expose',\n      strict: true,\n      schema,\n    },\n  },\n};\n\nreturn [{ json: payload }];"
+      },
+      "id": "build-openai-request-v2",
+      "name": "Build OpenAI Request",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2448,
+        800
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.openai.com/v1/responses",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ $json.openai_request_body }}",
+        "options": {}
+      },
+      "id": "normalize-openai-v2",
+      "name": "Normalize With OpenAI",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        2672,
+        800
+      ],
+      "retryOnFail": true,
+      "alwaysOutputData": true,
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "t4nDaIg2bZqp0SQN",
+          "name": "BIG OpenAI Header Auth"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "const payload = JSON.parse(JSON.stringify($('Parse Expose Deterministically').first().json || {}));\nconst response = $input.first()?.json || {};\nconst runtime = payload._runtime && typeof payload._runtime === 'object' ? payload._runtime : {};\n\nfunction parseGermanNumber(value) {\n  let parsed = null;\n  if (value != null && value !== '') {\n    if (typeof value === 'number') {\n      parsed = Number.isFinite(value) ? value : null;\n    } else {\n      let text = String(value).trim();\n      text = text.replace(/\\u00a0/g, ' ');\n      text = text.replace(/(eur|euro|m²|m2|qm|prozent|%|m)\\b/gi, '');\n      text = text.replace(/\\s+/g, '');\n      text = text.replace(/,-/g, '');\n      if (text.indexOf(',') !== -1 && text.indexOf('.') !== -1) {\n        text = text.replace(/\\./g, '').replace(',', '.');\n      } else if (text.indexOf(',') !== -1) {\n        text = text.replace(',', '.');\n      } else {\n        text = text.replace(/(\\d)\\.(?=\\d{3}(\\D|$))/g, '$1');\n      }\n      const numericValue = Number(text);\n      parsed = Number.isFinite(numericValue) ? numericValue : null;\n    }\n  }\n  return { value: parsed };\n}\n\nfunction getPath(target, path) {\n  const parts = path.split('.');\n  let current = target;\n  for (const part of parts) {\n    if (current == null || typeof current !== 'object' || !(part in current)) {\n      return { value: undefined };\n    }\n    current = current[part];\n  }\n  return { value: current };\n}\n\nfunction setPath(target, path, value) {\n  const parts = path.split('.');\n  let current = target;\n  for (let i = 0; i < parts.length - 1; i += 1) {\n    if (!current[parts[i]] || typeof current[parts[i]] !== 'object') current[parts[i]] = {};\n    current = current[parts[i]];\n  }\n  current[parts[parts.length - 1]] = value;\n}\n\nlet aiPayload = null;\nlet aiError = response.error?.message || response.error || null;\nconst candidateTexts = [];\nif (Array.isArray(response.output)) {\n  for (const outputItem of response.output) {\n    const contentItems = outputItem && Array.isArray(outputItem.content) ? outputItem.content : [];\n    for (const contentItem of contentItems) {\n      if (contentItem && typeof contentItem.text === 'string' && contentItem.text.trim()) candidateTexts.push(contentItem.text);\n      if (!aiPayload && contentItem && contentItem.json && typeof contentItem.json === 'object') aiPayload = contentItem.json;\n    }\n  }\n}\nif (!aiPayload && typeof response.text === 'string' && response.text.trim()) candidateTexts.push(response.text);\nif (!aiPayload) {\n  for (const candidateText of candidateTexts) {\n    try {\n      aiPayload = JSON.parse(candidateText);\n      break;\n    } catch (error) {\n      aiError = aiError || error.message;\n    }\n  }\n}\nif (!aiPayload || typeof aiPayload !== 'object') aiPayload = {};\n\nconst stringPaths = [\n  'received_date','provider','provider_contact.name','provider_contact.company','provider_contact.phone','provider_contact.email','owner','address.country','address.postal_code','address.city','address.street','address.house_number','property.property_type','property.ownership_type','notes','location_enrichment.aerial_image_url','location_enrichment.location_description','location_enrichment.public_transport_access','market_context.potential_revenue','market_context.demographics.population_development','market_context.demographics.purchasing_power','processing_metadata.document_id','processing_metadata.source_filename','processing_metadata.ingestion_channel','processing_metadata.processed_at','processing_metadata.status'\n];\nfor (const path of stringPaths) {\n  const currentValue = getPath(payload, path).value;\n  const aiValue = getPath(aiPayload, path).value;\n  if ((currentValue == null || currentValue === '') && aiValue != null && aiValue !== '') setPath(payload, path, String(aiValue));\n}\n\nconst numericPaths = [\n  'areas.usable_area_m2','areas.plot_area_m2','financials.target_rent_pa_eur','financials.actual_rent_pa_eur','financials.asking_price_eur','financials.price_per_m2_usable_area','financials.price_per_m2_land','property.construction_year','property.vacancy','property.parking_spaces','returns.gross_initial_yield_actual','returns.gross_initial_yield_target','location_enrichment.latitude','location_enrichment.longitude','location_enrichment.distance_city_center_min','location_enrichment.distance_train_station_min','location_enrichment.distance_airport_min'\n];\nfor (const path of numericPaths) {\n  const currentValue = getPath(payload, path).value;\n  const aiValue = getPath(aiPayload, path).value;\n  if (currentValue == null && aiValue != null && aiValue !== '') setPath(payload, path, parseGermanNumber(aiValue).value);\n}\n\nconst currentHeritage = getPath(payload, 'property.heritage_protection').value;\nconst aiHeritage = getPath(aiPayload, 'property.heritage_protection').value;\nif (currentHeritage == null && aiHeritage != null) {\n  if (typeof aiHeritage === 'boolean') payload.property.heritage_protection = aiHeritage;\n  else {\n    const lower = String(aiHeritage).toLowerCase();\n    if (/^(ja|yes|true|1|denkmal)/.test(lower)) payload.property.heritage_protection = true;\n    else if (/^(nein|no|false|0|kein)/.test(lower)) payload.property.heritage_protection = false;\n  }\n}\n\nif ((!payload.location_enrichment.infrastructure || !payload.location_enrichment.infrastructure.length) && Array.isArray(aiPayload.location_enrichment && aiPayload.location_enrichment.infrastructure)) {\n  const infrastructure = [];\n  for (const entry of aiPayload.location_enrichment.infrastructure) {\n    infrastructure.push({\n      category: entry && entry.category != null ? String(entry.category) : null,\n      name: entry && entry.name != null ? String(entry.name) : null,\n      address: entry && entry.address != null ? String(entry.address) : null,\n      distance_m: entry && entry.distance_m != null ? parseGermanNumber(entry.distance_m).value : null,\n    });\n  }\n  payload.location_enrichment.infrastructure = infrastructure;\n}\n\nif (!payload.provider_contact.company && payload.provider) payload.provider_contact.company = payload.provider;\nif (runtime.expose_location_description && !payload.location_enrichment.location_description) payload.location_enrichment.location_description = runtime.expose_location_description;\n\nfunction roundToTwo(value) {\n  let rounded = null;\n  if (value != null && Number.isFinite(value)) rounded = Math.round(value * 100) / 100;\n  return { value: rounded };\n}\n\nconst askingPrice = payload.financials.asking_price_eur;\nconst usableArea = payload.areas.usable_area_m2;\nconst plotArea = payload.areas.plot_area_m2;\nconst actualRent = payload.financials.actual_rent_pa_eur;\nconst targetRent = payload.financials.target_rent_pa_eur;\npayload.financials.price_per_m2_usable_area = askingPrice != null && usableArea ? roundToTwo(askingPrice / usableArea).value : null;\npayload.financials.price_per_m2_land = askingPrice != null && plotArea ? roundToTwo(askingPrice / plotArea).value : null;\npayload.returns.gross_initial_yield_actual = askingPrice != null && actualRent != null ? roundToTwo((actualRent / askingPrice) * 100).value : null;\npayload.returns.gross_initial_yield_target = askingPrice != null && targetRent != null ? roundToTwo((targetRent / askingPrice) * 100).value : null;\n\npayload._runtime = {\n  ...runtime,\n  ai_error: aiError,\n};\n\nreturn [{ json: payload }];"
+      },
+      "id": "merge-ai-output-v2",
+      "name": "Merge Deterministic And AI Output",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2896,
+        800
+      ]
+    },
+    {
+      "parameters": {
+        "workflowId": {
+          "mode": "list",
+          "value": "9TOg0e93bURiDsPE",
+          "cachedResultName": "BIG - Expose Location Enrichment"
+        },
+        "mode": "each",
+        "options": {
+          "waitForSubWorkflow": true
+        }
+      },
+      "id": "run-location-enrichment-v2",
+      "name": "Run Location Enrichment",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.3,
+      "position": [
+        3120,
+        800
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const payload = JSON.parse(JSON.stringify($input.first().json || {}));\nconst runtime = payload._runtime && typeof payload._runtime === 'object' ? payload._runtime : {};\n\nfunction createSchema() {\n  return {\n    received_date: null,\n    provider: null,\n    provider_contact: { name: null, company: null, phone: null, email: null },\n    owner: null,\n    address: { country: 'Austria', postal_code: null, city: null, street: null, house_number: null },\n    areas: { usable_area_m2: null, plot_area_m2: null },\n    financials: { target_rent_pa_eur: null, actual_rent_pa_eur: null, asking_price_eur: null, price_per_m2_usable_area: null, price_per_m2_land: null },\n    property: { property_type: null, ownership_type: null, construction_year: null, heritage_protection: null, vacancy: null, parking_spaces: null },\n    returns: { gross_initial_yield_actual: null, gross_initial_yield_target: null },\n    notes: null,\n    location_enrichment: { latitude: null, longitude: null, aerial_image_url: null, location_description: null, public_transport_access: null, distance_city_center_min: null, distance_train_station_min: null, distance_airport_min: null, infrastructure: [] },\n    market_context: { potential_revenue: null, demographics: { population_development: null, purchasing_power: null } },\n    processing_metadata: { document_id: null, source_filename: null, ingestion_channel: null, processed_at: null, status: null, validation_errors: [] },\n    _runtime: runtime,\n  };\n}\n\nfunction overlay(target, source) {\n  for (const key of Object.keys(target)) {\n    if (!(key in source)) continue;\n    if (Array.isArray(target[key])) {\n      target[key] = Array.isArray(source[key]) ? source[key] : target[key];\n    } else if (target[key] && typeof target[key] === 'object' && source[key] && typeof source[key] === 'object') {\n      overlay(target[key], source[key]);\n    } else {\n      target[key] = source[key];\n    }\n  }\n}\n\nfunction isNumberOrNull(value) {\n  return value === null || (typeof value === 'number' && Number.isFinite(value));\n}\n\nconst normalized = createSchema();\noverlay(normalized, payload);\nif (!Array.isArray(normalized.processing_metadata.validation_errors)) {\n  normalized.processing_metadata.validation_errors = [];\n}\nif (!Array.isArray(normalized.location_enrichment.infrastructure)) {\n  normalized.location_enrichment.infrastructure = [];\n}\n\nconst validationErrors = [];\nconst numericPaths = [\n  ['areas', 'usable_area_m2'],\n  ['areas', 'plot_area_m2'],\n  ['financials', 'target_rent_pa_eur'],\n  ['financials', 'actual_rent_pa_eur'],\n  ['financials', 'asking_price_eur'],\n  ['financials', 'price_per_m2_usable_area'],\n  ['financials', 'price_per_m2_land'],\n  ['property', 'construction_year'],\n  ['property', 'vacancy'],\n  ['property', 'parking_spaces'],\n  ['returns', 'gross_initial_yield_actual'],\n  ['returns', 'gross_initial_yield_target'],\n  ['location_enrichment', 'latitude'],\n  ['location_enrichment', 'longitude'],\n  ['location_enrichment', 'distance_city_center_min'],\n  ['location_enrichment', 'distance_train_station_min'],\n  ['location_enrichment', 'distance_airport_min'],\n];\nfor (const [group, key] of numericPaths) {\n  if (!isNumberOrNull(normalized[group][key])) {\n    validationErrors.push('numeric_field_invalid:' + group + '.' + key);\n    normalized[group][key] = null;\n  }\n}\n\nif (!normalized.provider) validationErrors.push('missing_business_critical:provider');\nif (!(normalized.address.city || normalized.address.postal_code || normalized.address.street)) validationErrors.push('missing_business_critical:address');\nif (!normalized.property.property_type) validationErrors.push('missing_business_critical:property.property_type');\nif (normalized.financials.asking_price_eur == null) validationErrors.push('missing_business_critical:financials.asking_price_eur');\nif (normalized.areas.usable_area_m2 == null) validationErrors.push('missing_business_critical:areas.usable_area_m2');\n\nnormalized.processing_metadata.processed_at = new Date().toISOString();\nnormalized.processing_metadata.validation_errors = validationErrors;\n\nif (validationErrors.length) {\n  normalized.processing_metadata.status = 'validation_failed';\n} else if (runtime.enrichment_failed) {\n  normalized.processing_metadata.status = 'partial_success';\n} else {\n  normalized.processing_metadata.status = 'success';\n}\n\nnormalized._runtime = {\n  ...runtime,\n  persist_result_marker: runtime.persist_result && runtime.persistence_mode === 'postgres' ? 1 : null,\n};\n\nreturn [{ json: normalized }];"
+      },
+      "id": "finalize-validation-v2",
+      "name": "Finalize Validation Status",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3344,
+        800
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "version": 2,
+            "leftValue": "",
+            "caseSensitive": true,
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "persist-result-marker",
+              "leftValue": "={{ !!$json._runtime.persist_result_marker }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "persist-result-v2",
+      "name": "Persist Result?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        3568,
+        800
+      ],
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "workflowId": {
+          "mode": "list",
+          "value": "65EivHdogEPu9MUF",
+          "cachedResultName": "BIG - Expose Persistence"
+        },
+        "mode": "each",
+        "options": {
+          "waitForSubWorkflow": true
+        }
+      },
+      "id": "persist-structured-v2",
+      "name": "Persist Structured Output",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.3,
+      "position": [
+        3792,
+        784
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const payload = JSON.parse(JSON.stringify($input.first().json || {}));\n\nfunction createSchema() {\n  return {\n    received_date: null,\n    provider: null,\n    provider_contact: { name: null, company: null, phone: null, email: null },\n    owner: null,\n    address: { country: 'Austria', postal_code: null, city: null, street: null, house_number: null },\n    areas: { usable_area_m2: null, plot_area_m2: null },\n    financials: { target_rent_pa_eur: null, actual_rent_pa_eur: null, asking_price_eur: null, price_per_m2_usable_area: null, price_per_m2_land: null },\n    property: { property_type: null, ownership_type: null, construction_year: null, heritage_protection: null, vacancy: null, parking_spaces: null },\n    returns: { gross_initial_yield_actual: null, gross_initial_yield_target: null },\n    notes: null,\n    location_enrichment: { latitude: null, longitude: null, aerial_image_url: null, location_description: null, public_transport_access: null, distance_city_center_min: null, distance_train_station_min: null, distance_airport_min: null, infrastructure: [] },\n    market_context: { potential_revenue: null, demographics: { population_development: null, purchasing_power: null } },\n    processing_metadata: { document_id: null, source_filename: null, ingestion_channel: null, processed_at: null, status: null, validation_errors: [] },\n  };\n}\n\nfunction overlay(target, source) {\n  for (const key of Object.keys(target)) {\n    if (!(key in source)) continue;\n    if (Array.isArray(target[key])) target[key] = Array.isArray(source[key]) ? source[key] : target[key];\n    else if (target[key] && typeof target[key] === 'object' && source[key] && typeof source[key] === 'object') overlay(target[key], source[key]);\n    else target[key] = source[key];\n  }\n}\n\nconst output = createSchema();\noverlay(output, payload);\nif (!Array.isArray(output.processing_metadata.validation_errors)) output.processing_metadata.validation_errors = [];\nif (!Array.isArray(output.location_enrichment.infrastructure)) output.location_enrichment.infrastructure = [];\noutput.location_enrichment.infrastructure = output.location_enrichment.infrastructure.map((entry) => ({\n  category: entry && entry.category != null ? entry.category : null,\n  name: entry && entry.name != null ? entry.name : null,\n  address: entry && entry.address != null ? entry.address : null,\n  distance_m: entry && typeof entry.distance_m === 'number' ? entry.distance_m : null,\n}));\nreturn [{ json: output }];"
+      },
+      "id": "prepare-final-output-v2",
+      "name": "Prepare Final Output",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        4048,
+        816
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "version": 2,
+            "leftValue": "",
+            "caseSensitive": true,
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "duplicate-lookup-requested",
+              "leftValue": "={{ !!$json._runtime.duplicate_lookup_requested }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "duplicate-lookup-enabled",
+      "name": "Duplicate Lookup Enabled?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        1104,
+        704
+      ],
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "content": "## README\n- Owner: Richard Berenczei / richard.berenczei@pwc.com\n- Dependencies: OpenAI Header Auth, BIG Google Maps workflows, Postgres credential, BIG - Expose Location Enrichment sub-workflow, BIG - Expose Persistence sub-workflow\n- Logic Summary: Convert one normalized PDF intake item into the canonical real-estate JSON schema, enrich it, validate it, and optionally persist it.",
+        "height": 240,
+        "width": 1224,
+        "color": 7
+      },
+      "id": "29521f81-965b-4d8b-8359-d38393119391",
+      "name": "README",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        32,
+        32
+      ]
+    },
+    {
+      "parameters": {
+        "content": "## Trigger / Input\nBlue section: receive the shared intake contract, hash the source PDF, and decide whether duplicate lookup should run.",
+        "height": 360,
+        "width": 1180,
+        "color": 5
+      },
+      "id": "cacc2966-1ea5-44f0-ae26-dc03f3cd67cf",
+      "name": "Input & Idempotency",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        144,
+        560
+      ]
+    },
+    {
+      "parameters": {
+        "content": "## Success Path\nGreen section: extract PDF text and parse every field that can be derived deterministically before AI is consulted.",
+        "height": 332,
+        "width": 520,
+        "color": 4
+      },
+      "id": "97849d4c-7980-4549-9125-4dcb797f56da",
+      "name": "Deterministic Extraction",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        1888,
+        608
+      ]
+    },
+    {
+      "parameters": {
+        "content": "## AI Reasoning\nOrange section: ask OpenAI to fill only missing or ambiguous schema fields using strict JSON output.",
+        "height": 348,
+        "width": 632,
+        "color": 2
+      },
+      "id": "58ff8db1-64de-48ee-adc6-6618e3a2f137",
+      "name": "AI Normalization",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        2416,
+        608
+      ]
+    },
+    {
+      "parameters": {
+        "content": "## Success Path\nGreen section: enrich the address, validate business-critical fields, optionally persist, and return the final stable payload.",
+        "height": 348,
+        "width": 1160,
+        "color": 4
+      },
+      "id": "c6a68d12-4c41-40b6-8096-3b061fc7d22f",
+      "name": "Enrichment, Validation & Persistence",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        3056,
+        608
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "var inputItem = $input.first() || {};\nvar extractedData = inputItem.json || {};\nvar duplicateStage = $('Resolve Duplicate Strategy').first() || {};\nvar payload = JSON.parse(JSON.stringify(duplicateStage.json || {}));\n\nfunction cleanText(value) {\n  var cleaned = null;\n  if (value != null) {\n    var candidateText = String(value).replace(/\\s+/g, ' ').trim();\n    cleaned = candidateText || null;\n  }\n  return { value: cleaned };\n}\n\nfunction cleanEmail(value) {\n  var cleaned = cleanText(value).value;\n  if (cleaned) {\n    cleaned = cleaned.replace(/(\\.[A-Za-z]{2,})(Mail|Mobil)$/i, '$1');\n  }\n  return { value: cleaned };\n}\n\nfunction cleanPhone(value) {\n  var cleaned = cleanText(value).value;\n  if (cleaned) {\n    cleaned = cleaned.replace(/(Mail|Mobil)$/i, '').trim();\n  }\n  return { value: cleaned };\n}\n\nfunction parseGermanNumber(value) {\n  var parsed = null;\n  if (value != null && value !== '') {\n    if (typeof value === 'number') {\n      parsed = Number.isFinite(value) ? value : null;\n    } else {\n      var text = String(value)\n        .replace(/\\u00a0/g, ' ')\n        .replace(/€/g, '')\n        .replace(/\\b(EUR|EURO|m²|m2|qm|%|Stk\\.?|St\\.?|p\\.a\\.|pa)\\b/gi, '')\n        .replace(/--/g, '')\n        .replace(/,-/g, '')\n        .replace(/[^0-9,.-]/g, '');\n      if (text && text !== '-' && text !== '--') {\n        if (text.includes(',') && text.includes('.')) {\n          text = text.replace(/\\./g, '').replace(',', '.');\n        } else if (text.includes(',')) {\n          text = text.replace(',', '.');\n        } else {\n          text = text.replace(/(\\d)\\.(?=\\d{3}(\\D|$))/g, '$1');\n        }\n        var candidateNumber = Number(text);\n        parsed = Number.isFinite(candidateNumber) ? candidateNumber : null;\n      }\n    }\n  }\n  return { value: parsed };\n}\n\nfunction pickFirstMatch(patterns, text) {\n  var value = null;\n  for (var patternIndex = 0; patternIndex < patterns.length; patternIndex += 1) {\n    var pattern = patterns[patternIndex];\n    var currentMatch = text.match(pattern);\n    if (currentMatch && currentMatch[1]) {\n      value = cleanText(currentMatch[1]).value;\n      break;\n    }\n  }\n  return { value: value };\n}\n\nfunction between(text, startPattern, endPattern) {\n  var value = null;\n  var startMatch = text.match(startPattern);\n  if (startMatch) {\n    var startIndex = startMatch.index + startMatch[0].length;\n    var sliced = text.slice(startIndex);\n    var endMatch = endPattern ? sliced.match(endPattern) : null;\n    var endIndex = endMatch ? endMatch.index : sliced.length;\n    value = cleanText(sliced.slice(0, endIndex)).value;\n  }\n  return { value: value };\n}\n\nfunction uniqueNonEmpty(values) {\n  var filteredValues = values.filter(function(entry, index) {\n    return Boolean(entry) && values.indexOf(entry) === index;\n  });\n  return { value: filteredValues };\n}\n\nvar rawText = typeof extractedData.text === 'string' ? extractedData.text : '';\nvar fullText = String(rawText)\n  .replace(/\\u00a0/g, ' ')\n  .replace(/\\r/g, '\\n')\n  .replace(/[ \\t]+/g, ' ')\n  .replace(/\\n{3,}/g, '\\n\\n')\n  .trim();\n\nvar workingText = (fullText.split(/\\nAllgemeine Geschäftsbedingungen\\b/i)[0] || fullText).trim();\nvar lines = workingText.split(/\\n+/).map(function(line) {\n  return cleanText(line).value;\n}).filter(Boolean);\nvar topLines = lines.slice(0, 20);\n\nvar provider = topLines.find(function(line) {\n  return /(gmbh|ag|kg|immobilien|real estate)/i.test(line) && !/disclaimer/i.test(line);\n}) || null;\n\nvar addressLine = lines.find(function(line) {\n  return /,\\s*\\d{4}\\s+[A-Za-zÄÖÜäöüß .'-]+$/.test(line) && /\\d/.test(line);\n}) || null;\nvar street = null;\nvar houseNumber = null;\nvar postalCode = null;\nvar city = null;\nvar alternateAddress = null;\nif (addressLine) {\n  var localityMatch = addressLine.match(/,\\s*(\\d{4})\\s+([A-Za-zÄÖÜäöüß .'-]+)$/);\n  if (localityMatch) {\n    postalCode = cleanText(localityMatch[1]).value;\n    city = cleanText(localityMatch[2]).value;\n    var addressPrefix = addressLine.slice(0, localityMatch.index).trim();\n    var addressParts = addressPrefix.split('/').map(function(part) {\n      return cleanText(part).value;\n    }).filter(Boolean);\n    if (addressParts.length > 1) {\n      alternateAddress = cleanText(addressPrefix).value;\n    }\n    var primaryAddress = addressParts[0] || addressPrefix;\n    var streetMatch = primaryAddress.match(/^(.+?)\\s+(\\d+[A-Za-z]?)$/);\n    if (streetMatch) {\n      street = cleanText(streetMatch[1]).value;\n      houseNumber = cleanText(streetMatch[2]).value;\n    } else {\n      street = cleanText(primaryAddress).value;\n    }\n  }\n}\n\nvar contactBlock = between(workingText, /(?:^|\\n)Kontakt\\s*\\n/i, /(?:^|\\n)Allgemeine Geschäftsbedingungen\\b/i).value || workingText;\nvar contactLines = contactBlock.split(/\\n+/).map(function(line) {\n  return cleanText(line).value;\n}).filter(Boolean);\nvar namedContactMatch = workingText.match(/\\n([A-ZÄÖÜ][A-Za-zÄÖÜäöüß.' -]+(?:,\\s*[A-Za-zÄÖÜäöüß. ]+)?)\\nInvestment\\b/);\nvar fallbackPersonLine = contactLines.find(function(line) {\n  return /^[A-ZÄÖÜ][A-Za-zÄÖÜäöüß.' -]+(?:,\\s*[A-Za-zÄÖÜäöüß. ]+)?$/.test(line) && !/^(kontakt|disclaimer|investment|mail|mobil|telefon|phone|www\\.|colourfish|office@)/i.test(line) && !/(gmbh|immobilien|real estate)/i.test(line);\n}) || null;\nvar personLine = namedContactMatch ? cleanText(namedContactMatch[1]).value : fallbackPersonLine;\n\nvar contactEmails = Array.from(contactBlock.matchAll(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\\.[A-Z]{2,}(?:Mail|Mobil)?/gi)).map(function(match) {\n  return cleanEmail(match[0]).value;\n});\nvar providerEmails = Array.from(workingText.matchAll(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\\.[A-Z]{2,}(?:Mail|Mobil)?/gi)).map(function(match) {\n  return cleanEmail(match[0]).value;\n});\nvar directEmailMatch = workingText.match(/\\n([A-Z0-9._%+-]+@[A-Z0-9.-]+\\.[A-Z]{2,}(?:Mail)?)\\n(?:\\+43|0)/i);\nvar directEmail = directEmailMatch ? cleanEmail(directEmailMatch[1]).value : null;\nvar preferredEmail = directEmail || contactEmails.find(function(email) {\n  return email && !/^office@/i.test(email);\n}) || contactEmails[0] || providerEmails.find(function(email) {\n  return email && !/^office@/i.test(email);\n}) || providerEmails[0] || null;\n\nvar contactPhones = Array.from(contactBlock.matchAll(/(\\+43[0-9\\s()/.-]{6,}|0[0-9\\s()/.-]{7,})(?:Mail|Mobil)?/g)).map(function(match) {\n  return cleanPhone(match[1]).value;\n});\nvar providerPhones = Array.from(workingText.matchAll(/(\\+43[0-9\\s()/.-]{6,}|0[0-9\\s()/.-]{7,})(?:Mail|Mobil)?/g)).map(function(match) {\n  return cleanPhone(match[1]).value;\n});\nvar mobilePhoneMatch = workingText.match(/\\n(\\+43[0-9\\s()/.-]{6,}|0[0-9\\s()/.-]{7,})Mobil\\b/i);\nvar directPhone = mobilePhoneMatch ? cleanPhone(mobilePhoneMatch[1]).value : null;\nvar preferredPhone = directPhone || contactPhones[0] || providerPhones[0] || null;\n\nvar plotArea = parseGermanNumber(pickFirstMatch([\n  /([0-9][0-9.,\\s]*)\\s*m²\\s*GST-Fläche/i,\n  /([0-9][0-9.,\\s]*)\\s*m²\\s*(?:Grundstücksfläche|Grundfläche|Grundstück)/i,\n  /(?:GST-Fläche|Grundstücksfläche|Grundfläche)[^0-9]{0,20}([0-9][0-9.,\\s]*)\\s*m²/i\n], workingText).value).value;\n\nvar usableArea = parseGermanNumber(pickFirstMatch([\n  /([0-9][0-9.,\\s]*)\\s*m²\\s*Nutzfläche gesamt netto[^\\n]*/i,\n  /([0-9][0-9.,\\s]*)\\s*m²\\s*Nutzfläche gesamt[^\\n]*/i,\n  /([0-9][0-9.,\\s]*)\\s*m²\\s*Wohnfläche[^\\n]*/i,\n  /([0-9][0-9.,\\s]*)\\s*m²\\s*Nutzfläche unbefristet[^\\n]*/i,\n  /(?:Nutzfläche gesamt netto|Nutzfläche gesamt|Wohnfläche)[^0-9]{0,20}([0-9][0-9.,\\s]*)\\s*m²/i\n], workingText).value).value;\n\nvar vacancy = parseGermanNumber(pickFirstMatch([\n  /([0-9][0-9.,\\s]*)\\s*m²\\s*Leerstand/i,\n  /Leerstand[^0-9]{0,20}([0-9][0-9.,\\s]*)\\s*m²/i\n], workingText).value).value;\n\nvar askingPrice = parseGermanNumber(pickFirstMatch([\n  /€\\s*([0-9][0-9.,\\s]*)\\s*(?:,--)?\\s*Kaufpreis/i,\n  /([0-9][0-9.,\\s]*)\\s*€\\s*(?:,--)?\\s*Kaufpreis/i,\n  /Kaufpreis[^0-9]{0,20}€?\\s*([0-9][0-9.,\\s]*)/i\n], workingText).value).value;\n\nvar actualRentPa = parseGermanNumber(pickFirstMatch([\n  /€\\s*([0-9][0-9.,\\s]*)\\s*(?:,--)?\\s*IST\\s*[–-]\\s*Ertrag,?\\s*p\\.?a\\.?/i,\n  /IST\\s*[–-]\\s*Ertrag,?\\s*p\\.?a\\.?[^0-9]{0,20}€?\\s*([0-9][0-9.,\\s]*)/i\n], workingText).value).value;\n\nvar targetRentPa = parseGermanNumber(pickFirstMatch([\n  /€\\s*([0-9][0-9.,\\s]*)\\s*(?:,--)?\\s*SOLL\\s*[–-]\\s*Ertrag,?\\s*p\\.?a\\.?/i,\n  /SOLL\\s*[–-]\\s*Ertrag,?\\s*p\\.?a\\.?[^0-9]{0,20}€?\\s*([0-9][0-9.,\\s]*)/i\n], workingText).value).value;\n\nvar parkingSpaces = parseGermanNumber(pickFirstMatch([\n  /(?:Stellplätze|Stellplaetze|Parkplätze|Parkplaetze|Garagen)[^0-9]{0,20}([0-9][0-9.,\\s]*)/i,\n  /([0-9][0-9.,\\s]*)\\s*(?:Stellplätze|Stellplaetze|Parkplätze|Parkplaetze|Garagen)/i\n], workingText).value).value;\n\nvar constructionYearMatch = workingText.match(/(?:Baujahr|errichtet|erbaut)\\s*[:\\-]?\\s*(\\d{4})/i);\nvar constructionYear = constructionYearMatch ? Number(constructionYearMatch[1]) : null;\n\nvar propertyType = null;\nif (/wohneinheiten|wohnhaus|wohnimmobilie|wohn-/i.test(workingText)) {\n  propertyType = 'residential';\n} else if (/büro|buero|office/i.test(workingText)) {\n  propertyType = 'office';\n} else if ((/bestandsgebäude|bestandsgebaeude|altbestand/i.test(workingText) || usableArea != null) && plotArea != null) {\n  propertyType = 'plot_with_existing_building';\n} else if (/unbebaut|baugrund|bauland/i.test(workingText)) {\n  propertyType = 'undeveloped_plot';\n} else if (/objekt|immobilie|liegenschaft/i.test(workingText)) {\n  propertyType = 'other';\n}\n\nvar ownershipType = null;\nif (/volleigentum|alleineigentum/i.test(workingText)) {\n  ownershipType = 'sole_ownership';\n} else if (/wohnungseigentum/i.test(workingText)) {\n  ownershipType = 'condominium_ownership';\n} else if (/miteigentum/i.test(workingText)) {\n  ownershipType = 'co_ownership';\n} else if (/baurecht/i.test(workingText)) {\n  ownershipType = 'building_right';\n}\n\nvar heritageProtection = null;\nif (/kein\\s+denkmalschutz|nicht\\s+denkmalgesch/i.test(workingText)) {\n  heritageProtection = false;\n} else if (/denkmalschutz|denkmalgesch/i.test(workingText)) {\n  heritageProtection = true;\n}\n\nvar locationDescription = between(workingText, /(?:^|\\n)(?:Lage|Standort|Mikrolage|Umgebung|Infrastruktur)\\s*[:\\-]?\\s*\\n/i, /(?:^|\\n)(?:Kontakt|Kaufpreis|Miete|Fläche|Flaeche|Ausstattung|Baujahr)\\b/i).value;\nvar buyerFeeMatch = workingText.match(/([0-9.,]+%\\s+vom\\s+Kaufpreis[\\s\\S]{0,80}?Käuferhonorar:?)/i);\nvar commissionNote = buyerFeeMatch ? cleanText(buyerFeeMatch[1].replace(/Käuferhonorar:?/i, 'Käuferhonorar').replace(/\\s+/g, ' ')).value : null;\nvar notes = uniqueNonEmpty([\n  commissionNote,\n  alternateAddress ? 'corner address: ' + alternateAddress : null\n]).value.join(' | ') || null;\n\npayload.provider = provider || payload.provider;\npayload.provider_contact.name = personLine || payload.provider_contact.name;\npayload.provider_contact.company = provider || payload.provider_contact.company;\npayload.provider_contact.phone = preferredPhone || payload.provider_contact.phone;\npayload.provider_contact.email = preferredEmail || payload.provider_contact.email;\npayload.address.country = payload.address.country || 'Austria';\npayload.address.postal_code = postalCode || payload.address.postal_code;\npayload.address.city = city || payload.address.city;\npayload.address.street = street || payload.address.street;\npayload.address.house_number = houseNumber || payload.address.house_number;\npayload.areas.usable_area_m2 = usableArea != null ? usableArea : payload.areas.usable_area_m2;\npayload.areas.plot_area_m2 = plotArea != null ? plotArea : payload.areas.plot_area_m2;\npayload.financials.actual_rent_pa_eur = actualRentPa != null ? actualRentPa : payload.financials.actual_rent_pa_eur;\npayload.financials.target_rent_pa_eur = targetRentPa != null ? targetRentPa : payload.financials.target_rent_pa_eur;\npayload.financials.asking_price_eur = askingPrice != null ? askingPrice : payload.financials.asking_price_eur;\npayload.property.property_type = propertyType || payload.property.property_type;\npayload.property.ownership_type = ownershipType || payload.property.ownership_type;\npayload.property.construction_year = constructionYear != null ? constructionYear : payload.property.construction_year;\npayload.property.heritage_protection = heritageProtection != null ? heritageProtection : payload.property.heritage_protection;\npayload.property.vacancy = vacancy != null ? vacancy : payload.property.vacancy;\npayload.property.parking_spaces = parkingSpaces != null ? parkingSpaces : payload.property.parking_spaces;\npayload.notes = notes || payload.notes;\npayload.location_enrichment.location_description = locationDescription || payload.location_enrichment.location_description;\n\npayload._runtime = {\n  ...(payload._runtime || {}),\n  extracted_text: fullText,\n  expose_location_description: locationDescription || null\n};\n\nreturn [{ json: payload }];"
+      },
+      "id": "parse-deterministic-v2",
+      "name": "Parse Expose Deterministically - Raw",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2224,
+        800
+      ]
+    },
+    {
+      "id": "sanitize-extracted-fields-v1",
+      "name": "Parse Expose Deterministically",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2448,
+        936
+      ],
+      "parameters": {
+        "jsCode": "var inputItem = $input.first() || {};\nvar payload = JSON.parse(JSON.stringify(inputItem.json || {}));\nvar runtime = payload._runtime && typeof payload._runtime === 'object' ? payload._runtime : {};\nvar sourceFilename = String((payload.processing_metadata && payload.processing_metadata.source_filename) || '');\nvar fullText = String(runtime.extracted_text || '');\n\nfunction cleanText(value) {\n  var cleaned = null;\n  if (value != null) {\n    var text = String(value).replace(/\\s+/g, ' ').trim();\n    cleaned = text || null;\n  }\n  return { value: cleaned };\n}\n\nfunction looksLikeHeading(value) {\n  var text = cleanText(value).value;\n  var looksLike = false;\n  if (text) {\n    if (/^(verkaufsprozess|disclaimer|kontakt|investment|lage|standort|mikrolage)$/i.test(text)) {\n      looksLike = true;\n    } else {\n      var letters = text.replace(/[^A-Za-zÄÖÜäöüß]/g, '');\n      looksLike = Boolean(letters) && letters.length >= 6 && letters === letters.toUpperCase();\n    }\n  }\n  return { value: looksLike };\n}\n\nfunction normalizePhone(value) {\n  var normalized = null;\n  var text = cleanText(value).value;\n  if (text) {\n    if (!/^\\d{1,2}\\s*[./-]?\\s*\\d{4}$/.test(text)) {\n      var digits = text.replace(/\\D/g, '');\n      if (digits.length >= 8) normalized = text;\n    }\n  }\n  return { value: normalized };\n}\n\nfunction parseFilenameAddress(filename) {\n  var result = null;\n  var baseName = String(filename || '').replace(/\\.pdf$/i, '');\n  if (baseName) {\n    var segments = baseName.split('_').map(function(segment) {\n      return cleanText(segment).value;\n    }).filter(Boolean);\n\n    if (segments.length >= 2) {\n      var streetSegment = segments[segments.length - 2];\n      var localitySegment = segments[segments.length - 1];\n      var streetMatch = streetSegment ? streetSegment.match(/^(.+?)\\s+(\\d+[A-Za-z]?)$/) : null;\n      var localityMatch = localitySegment ? localitySegment.match(/^(\\d{4})\\s+(.+)$/) : null;\n      if (streetMatch && localityMatch) {\n        result = {\n          street: cleanText(streetMatch[1]).value,\n          house_number: cleanText(streetMatch[2]).value,\n          postal_code: cleanText(localityMatch[1]).value,\n          city: cleanText(localityMatch[2]).value,\n        };\n      }\n    }\n\n    if (!result) {\n      var normalized = cleanText(baseName.replace(/_/g, ' ')).value;\n      var fallbackMatch = normalized ? normalized.match(/(.+?)\\s+(\\d+[A-Za-z]?)\\s+(\\d{4})\\s+([A-Za-zÄÖÜäöüß.' -]+)$/) : null;\n      if (fallbackMatch) {\n        result = {\n          street: cleanText(fallbackMatch[1].replace(/^(?:CBRE|Teaser|Expose|Exposé|Factsheet)\\s+/ig, '')).value,\n          house_number: cleanText(fallbackMatch[2]).value,\n          postal_code: cleanText(fallbackMatch[3]).value,\n          city: cleanText(fallbackMatch[4]).value,\n        };\n      }\n    }\n  }\n  return { value: result };\n}\n\nif (!payload.provider_contact || typeof payload.provider_contact !== 'object') {\n  payload.provider_contact = {\n    name: null,\n    company: null,\n    phone: null,\n    email: null,\n  };\n}\n\nif (looksLikeHeading(payload.provider_contact.name).value) {\n  payload.provider_contact.name = null;\n}\n\npayload.provider_contact.phone = normalizePhone(payload.provider_contact.phone).value;\n\nif (!payload.provider && /\\bCBRE\\b/i.test(fullText + '\\n' + sourceFilename)) {\n  payload.provider = 'CBRE';\n}\n\nif (!payload.provider_contact.company && payload.provider) {\n  payload.provider_contact.company = payload.provider;\n}\n\nif (!payload.provider && payload.provider_contact.company) {\n  payload.provider = payload.provider_contact.company;\n}\n\nvar filenameAddress = parseFilenameAddress(sourceFilename).value;\nif (filenameAddress) {\n  payload.address = payload.address && typeof payload.address === 'object' ? payload.address : {};\n  if (!payload.address.country) payload.address.country = 'Austria';\n  if (!payload.address.street && filenameAddress.street) payload.address.street = filenameAddress.street;\n  if (!payload.address.house_number && filenameAddress.house_number) payload.address.house_number = filenameAddress.house_number;\n  if (!payload.address.postal_code && filenameAddress.postal_code) payload.address.postal_code = filenameAddress.postal_code;\n  if (!payload.address.city && filenameAddress.city) payload.address.city = filenameAddress.city;\n}\n\nvar lowCoverage = fullText.length < 1200 || (/VERKAUFSPROZESS/i.test(fullText) && /DISCLAIMER/i.test(fullText) && !/\\d{4}\\s+Wien/i.test(fullText));\npayload._runtime = {\n  ...runtime,\n  extraction_quality: lowCoverage ? 'low_text_layer_coverage' : (runtime.extraction_quality || null),\n};\n\nreturn [{ json: payload }];"
+      }
+    }
+  ],
+  "connections": {
+    "Receive Intake Payload": {
+      "main": [
+        [
+          {
+            "node": "Normalize Intake Payload",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalize Intake Payload": {
+      "main": [
+        [
+          {
+            "node": "Hash Source PDF",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Hash Source PDF": {
+      "main": [
+        [
+          {
+            "node": "Initialize Extraction Context",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Lookup Existing Extraction": {
+      "main": [
+        [
+          {
+            "node": "Resolve Duplicate Strategy",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Resolve Duplicate Strategy": {
+      "main": [
+        [
+          {
+            "node": "Reuse Existing Extraction?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Reuse Existing Extraction?": {
+      "main": [
+        [
+          {
+            "node": "Return Reused Payload",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Extract PDF Text",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Return Reused Payload": {
+      "main": [
+        [
+          {
+            "node": "Prepare Final Output",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract PDF Text": {
+      "main": [
+        [
+          {
+            "node": "Parse Expose Deterministically - Raw",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build OpenAI Request": {
+      "main": [
+        [
+          {
+            "node": "Normalize With OpenAI",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalize With OpenAI": {
+      "main": [
+        [
+          {
+            "node": "Merge Deterministic And AI Output",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Merge Deterministic And AI Output": {
+      "main": [
+        [
+          {
+            "node": "Run Location Enrichment",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Run Location Enrichment": {
+      "main": [
+        [
+          {
+            "node": "Finalize Validation Status",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Finalize Validation Status": {
+      "main": [
+        [
+          {
+            "node": "Persist Result?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Persist Result?": {
+      "main": [
+        [
+          {
+            "node": "Persist Structured Output",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Prepare Final Output",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Persist Structured Output": {
+      "main": [
+        [
+          {
+            "node": "Prepare Final Output",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Initialize Extraction Context": {
+      "main": [
+        [
+          {
+            "node": "Duplicate Lookup Enabled?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Duplicate Lookup Enabled?": {
+      "main": [
+        [
+          {
+            "node": "Lookup Existing Extraction",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Resolve Duplicate Strategy",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Expose Deterministically - Raw": {
+      "main": [
+        [
+          {
+            "node": "Parse Expose Deterministically",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Expose Deterministically": {
+      "main": [
+        [
+          {
+            "node": "Build OpenAI Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "errorWorkflow": "PIlbEFexoMxalpwB",
+    "callerPolicy": "workflowsFromSameOwner",
+    "availableInMCP": false
+  },
+  "pinData": {},
+  "tags": [
+    "BIG",
+    "Lifecycle: Production",
+    "Type: Utility"
+  ]
+}
