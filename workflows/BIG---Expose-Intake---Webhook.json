@@ -71,8 +71,8 @@
     },
     {
       "parameters": {
-        "content": "## README\n- Owner: Richard Berenczei / richard.berenczei@pwc.com\n- Dependencies: Webhook Trigger, Respond to Webhook, BIG - Expose Processing Core sub-workflow\n- Logic Summary: Accept a PDF over HTTP, normalize the request, process it through the core workflow, and return structured JSON synchronously.",
-        "height": 124,
+        "content": "## README\n- Owner: Richard Berenczei / richard.berenczei@pwc.com\n- Status: **Draft** — not yet activated for production use\n- Dependencies: Webhook Trigger, Respond to Webhook, BIG - Expose Processing Core sub-workflow\n- Logic Summary: Accept a PDF over HTTP POST, normalize the multipart request into the shared intake contract, process it through the core workflow, and return structured JSON synchronously to the caller.\n\n## Input Contract\n- **Endpoint:** `POST /webhook/big/expose-intake`\n- **Body:** multipart/form-data with a PDF file in the `pdf` field\n- **Optional JSON fields:** `source_filename`, `received_date`, `duplicate_mode` (skip/overwrite/reprocess), `persist_result` (true/false), `persistence_mode` (postgres/none)\n\n## Output Contract\nReturns the Processing Core's final JSON payload as the HTTP response body (via Respond to Webhook node).\n\n## Normalized Handoff to Core\n`{ source_filename, ingestion_channel: \"webhook\", received_date, duplicate_mode, persist_result, persistence_mode }` + binary key `pdf`\n\n## Error Behavior\n- Throws if the request contains no PDF attachment\n- Downstream errors are handled by the Processing Core and the global Error Handler (PIlbEFexoMxalpwB)",
+        "height": 612,
         "width": 1032,
         "color": 7
       },
@@ -81,8 +81,8 @@
       "type": "n8n-nodes-base.stickyNote",
       "typeVersion": 1,
       "position": [
-        -160,
-        48
+        -624,
+        -432
       ]
     },
     {
