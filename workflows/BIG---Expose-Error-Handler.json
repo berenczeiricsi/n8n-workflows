@@ -67,6 +67,7 @@
       "retryOnFail": true,
       "maxTries": 3,
       "waitBetweenTries": 5000,
+      "webhookId": "c1ff2a10-313f-4bbd-8ca7-adc805402b79",
       "onError": "continueRegularOutput"
     },
     {
@@ -82,8 +83,8 @@
     },
     {
       "parameters": {
-        "content": "## README\n- Owner: Richard Berenczei / richard.berenczei@pwc.com\n- Dependencies: BIG - Expose Persistence sub-workflow, Gmail credential (for error email alerts)\n- Logic Summary: Capture hard workflow failures via n8n Error Trigger, build a standardized failure payload, persist it to Postgres for audit, and send an email alert.\n\n## Input Contract\n- **Trigger:** n8n Error Trigger — fires automatically when any workflow with `errorWorkflow` set to this workflow ID fails\n- Receives: `{ workflow: { id, name }, execution: { id, error, lastNodeExecuted } }`\n\n## Output Contract\nNo return value — this is a terminal error-handling workflow.\n\n## What It Does\n1. Extracts workflow name, last executed node, and error message from the trigger payload\n2. Builds a full canonical extraction payload with `status: \"failed\"` and error details in `validation_errors`\n3. Persists the failure record via the Persistence sub-workflow (document_id: `error_<workflowId>_<timestamp>`)\n4. Sends an HTML error email to berenczeijr@gmail.com with workflow, node, error, and timestamp details\n\n## Error Behavior\n- Gmail node has `continueOnFail` + retry (3 attempts, 5s interval) — email failure does not block the handler\n- If persistence itself fails, the error is silently swallowed (last-resort handler)\n\n## Setup\n1. Configure a **Gmail OAuth2** credential in n8n\n2. Assign it to the \"Send Error Email\" node\n3. Re-activate this workflow",
-        "height": 520,
+        "content": "## README\n- Owner: Richard Berenczei / richard.berenczei@pwc.com\n- Dependencies: BIG - Expose Persistence sub-workflow, Gmail credential (for error email alerts)\n- Logic Summary: Capture hard workflow failures via n8n Error Trigger, build a standardized failure payload, persist it to Postgres for audit, and send an email alert.\n\n## Input Contract\n- **Trigger:** n8n Error Trigger — fires automatically when any workflow with `errorWorkflow` set to this workflow ID fails\n- Receives: `{ workflow: { id, name }, execution: { id, error, lastNodeExecuted } }`\n\n## Output Contract\nNo return value — this is a terminal error-handling workflow.\n\n## What It Does\n1. Extracts workflow name, last executed node, and error message from the trigger payload\n2. Builds a full canonical extraction payload with `status: \"failed\"` and error details in `validation_errors`\n3. Persists the failure record via the Persistence sub-workflow (document_id: `error_<workflowId>_<timestamp>`)\n4. Sends an HTML error email with workflow, node, error, and timestamp details\n\n## Error Behavior\n- Gmail node has `continueOnFail` + retry (3 attempts, 5s interval) — email failure does not block the handler\n- If persistence itself fails, the error is silently swallowed (last-resort handler)\n\n## Setup\n1. Configure a **Gmail OAuth2** credential in n8n\n2. Assign it to the \"Send Error Email\" node\n3. Re-activate this workflow",
+        "height": 712,
         "width": 944,
         "color": 7
       },
@@ -92,8 +93,8 @@
       "type": "n8n-nodes-base.stickyNote",
       "typeVersion": 1,
       "position": [
-        -208,
-        -48
+        -368,
+        -576
       ]
     },
     {
