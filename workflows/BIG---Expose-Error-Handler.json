@@ -48,6 +48,28 @@
       ]
     },
     {
+      "parameters": {
+        "sendTo": "berenczeijr@gmail.com",
+        "subject": "=🚨 BIG Pipeline Error: {{ $json.processing_metadata.validation_errors[0] || 'Unknown workflow' }}",
+        "message": "=<html><body style=\"font-family:Arial,sans-serif;margin:0;padding:20px;background:#f5f5f5;\"><div style=\"max-width:600px;margin:0 auto;background:#fff;border-radius:8px;overflow:hidden;box-shadow:0 2px 8px rgba(0,0,0,0.1);\"><div style=\"background:#d32f2f;padding:20px 25px;\"><h1 style=\"color:#fff;margin:0;font-size:20px;\">🚨 BIG Expose Pipeline Error</h1></div><div style=\"padding:25px;\"><table style=\"width:100%;border-collapse:collapse;\"><tr><td style=\"padding:8px 0;color:#666;width:140px;\">Workflow</td><td style=\"padding:8px 0;font-weight:600;\">{{ $json.processing_metadata.validation_errors[0] || 'Unknown' }}</td></tr><tr><td style=\"padding:8px 0;color:#666;\">Failed Node</td><td style=\"padding:8px 0;\">{{ $json.processing_metadata.validation_errors[1] || 'Unknown' }}</td></tr><tr><td style=\"padding:8px 0;color:#666;\">Error</td><td style=\"padding:8px 0;color:#d32f2f;\">{{ $json.processing_metadata.validation_errors[2] || 'Unknown error' }}</td></tr><tr><td style=\"padding:8px 0;color:#666;\">Timestamp</td><td style=\"padding:8px 0;\">{{ $json.processing_metadata.processed_at }}</td></tr><tr><td style=\"padding:8px 0;color:#666;\">Document ID</td><td style=\"padding:8px 0;font-family:monospace;font-size:12px;\">{{ $json.processing_metadata.document_id }}</td></tr></table></div><div style=\"padding:15px 25px;background:#f9f9f9;border-top:1px solid #eee;\"><p style=\"margin:0;font-size:12px;color:#999;\">This alert was sent by the BIG Expose Error Handler. Check the n8n execution log for full details.</p></div></div></body></html>",
+        "options": {
+          "appendAttribution": false
+        }
+      },
+      "id": "0660b06d-ac1b-4322-a12c-84d89b30e7bc",
+      "name": "Send Error Email",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.2,
+      "position": [
+        1024,
+        304
+      ],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 5000,
+      "onError": "continueRegularOutput"
+    },
+    {
       "parameters": {},
       "id": "error-handler-complete",
       "name": "Error Handler Complete",
@@ -60,8 +82,8 @@
     },
     {
       "parameters": {
-        "content": "## README\n- Owner: Richard Berenczei / richard.berenczei@pwc.com\n- Dependencies: BIG - Expose Persistence sub-workflow, optional alert webhook endpoint\n- Logic Summary: Capture hard workflow failures, persist failure context, and optionally alert operators without losing debugging detail.",
-        "height": 124,
+        "content": "## README\n- Owner: Richard Berenczei / richard.berenczei@pwc.com\n- Dependencies: BIG - Expose Persistence sub-workflow, Gmail credential (for error email alerts)\n- Logic Summary: Capture hard workflow failures via n8n Error Trigger, build a standardized failure payload, persist it to Postgres for audit, and send an email alert.\n\n## Input Contract\n- **Trigger:** n8n Error Trigger — fires automatically when any workflow with `errorWorkflow` set to this workflow ID fails\n- Receives: `{ workflow: { id, name }, execution: { id, error, lastNodeExecuted } }`\n\n## Output Contract\nNo return value — this is a terminal error-handling workflow.\n\n## What It Does\n1. Extracts workflow name, last executed node, and error message from the trigger payload\n2. Builds a full canonical extraction payload with `status: \"failed\"` and error details in `validation_errors`\n3. Persists the failure record via the Persistence sub-workflow (document_id: `error_<workflowId>_<timestamp>`)\n4. Sends an HTML error email to berenczeijr@gmail.com with workflow, node, error, and timestamp details\n\n## Error Behavior\n- Gmail node has `continueOnFail` + retry (3 attempts, 5s interval) — email failure does not block the handler\n- If persistence itself fails, the error is silently swallowed (last-resort handler)\n\n## Setup\n1. Configure a **Gmail OAuth2** credential in n8n\n2. Assign it to the \"Send Error Email\" node\n3. Re-activate this workflow",
+        "height": 520,
         "width": 944,
         "color": 7
       },
@@ -121,29 +143,6 @@
         1296,
         160
       ]
-    },
-    {
-      "parameters": {
-        "sendTo": "berenczeijr@gmail.com",
-        "subject": "=🚨 BIG Pipeline Error: {{ $json.processing_metadata.validation_errors[0] || 'Unknown workflow' }}",
-        "message": "=<html><body style=\"font-family:Arial,sans-serif;margin:0;padding:20px;background:#f5f5f5;\"><div style=\"max-width:600px;margin:0 auto;background:#fff;border-radius:8px;overflow:hidden;box-shadow:0 2px 8px rgba(0,0,0,0.1);\"><div style=\"background:#d32f2f;padding:20px 25px;\"><h1 style=\"color:#fff;margin:0;font-size:20px;\">🚨 BIG Expose Pipeline Error</h1></div><div style=\"padding:25px;\"><table style=\"width:100%;border-collapse:collapse;\"><tr><td style=\"padding:8px 0;color:#666;width:140px;\">Workflow</td><td style=\"padding:8px 0;font-weight:600;\">{{ $json.processing_metadata.validation_errors[0] || 'Unknown' }}</td></tr><tr><td style=\"padding:8px 0;color:#666;\">Failed Node</td><td style=\"padding:8px 0;\">{{ $json.processing_metadata.validation_errors[1] || 'Unknown' }}</td></tr><tr><td style=\"padding:8px 0;color:#666;\">Error</td><td style=\"padding:8px 0;color:#d32f2f;\">{{ $json.processing_metadata.validation_errors[2] || 'Unknown error' }}</td></tr><tr><td style=\"padding:8px 0;color:#666;\">Timestamp</td><td style=\"padding:8px 0;\">{{ $json.processing_metadata.processed_at }}</td></tr><tr><td style=\"padding:8px 0;color:#666;\">Document ID</td><td style=\"padding:8px 0;font-family:monospace;font-size:12px;\">{{ $json.processing_metadata.document_id }}</td></tr></table></div><div style=\"padding:15px 25px;background:#f9f9f9;border-top:1px solid #eee;\"><p style=\"margin:0;font-size:12px;color:#999;\">This alert was sent by the BIG Expose Error Handler. Check the n8n execution log for full details.</p></div></div></body></html>",
-        "options": {
-          "appendAttribution": false
-        }
-      },
-      "id": "0660b06d-ac1b-4322-a12c-84d89b30e7bc",
-      "name": "Send Error Email",
-      "type": "n8n-nodes-base.gmail",
-      "typeVersion": 2.2,
-      "position": [
-        1024,
-        304
-      ],
-      "retryOnFail": true,
-      "maxTries": 3,
-      "waitBetweenTries": 5000,
-      "webhookId": "d559bf30-6258-487b-a2a3-56b63596cad6",
-      "onError": "continueRegularOutput"
     }
   ],
   "connections": {
