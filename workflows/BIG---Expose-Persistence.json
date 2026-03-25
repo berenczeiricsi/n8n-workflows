@@ -24,7 +24,7 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        496,
+        512,
         304
       ]
     },
@@ -39,17 +39,16 @@
           "mode": "name",
           "value": "real_estate_extractions"
         },
-        "options": {
-          "queryBatching": "single",
-          "largeNumbersOutput": "numbers",
-          "replaceEmptyStrings": true
-        },
-        "columnToMatchOn": "document_id",
         "columns": {
           "mappingMode": "autoMapInputData",
           "matchingColumns": [
             "document_id"
           ]
+        },
+        "options": {
+          "queryBatching": "single",
+          "largeNumbersOutput": "numbers",
+          "replaceEmptyStrings": true
         }
       },
       "id": "upsert-extraction-record",
@@ -83,8 +82,8 @@
     },
     {
       "parameters": {
-        "content": "## README\n- Owner: Richard Berenczei / richard.berenczei@pwc.com\n- Dependencies: Postgres credential, real_estate_extractions table\n- Logic Summary: Prepare the canonical JSON payload for storage and upsert it into Postgres without leaking runtime helper fields.",
-        "height": 220,
+        "content": "## README\n- Owner: Richard Berenczei / richard.berenczei@pwc.com\n- Dependencies: BIG Postgres credential, `real_estate_extractions` table (created by Postgres Setup workflow)\n- Logic Summary: Prepare the canonical JSON payload for storage — strip `_runtime` helper fields — and upsert into Postgres. Returns the original payload with persistence metadata.\n\n## Input Contract\nCalled via `executeWorkflow` from Processing Core or Error Handler. Expects the full extraction payload with `processing_metadata.document_id` as the upsert key.\n\n## Output Contract\nReturns the **original input payload** (including `_runtime`) with two fields added:\n```\n_runtime.persistence_attempted: true\n_runtime.persistence_error: null | \"error message\"\n```\n\n## Upsert Details\n- Table: `public.real_estate_extractions`\n- Match column: `document_id`\n- Stored columns: `document_id`, `source_filename`, `ingestion_channel`, `status`, `received_date`, `processed_at`, `payload_jsonb` (full payload without `_runtime`), `validation_errors_jsonb`\n\n## Error Behavior\n- DB errors are caught via `continueOnFail` — the workflow never throws\n- On DB failure, `_runtime.persistence_error` contains the error message\n- The original payload is always returned for downstream continuity",
+        "height": 704,
         "width": 908,
         "color": 7
       },
@@ -93,8 +92,8 @@
       "type": "n8n-nodes-base.stickyNote",
       "typeVersion": 1,
       "position": [
-        16,
-        -96
+        -256,
+        -608
       ]
     },
     {
