@@ -11,8 +11,8 @@
       "type": "n8n-nodes-base.executeWorkflowTrigger",
       "typeVersion": 1.1,
       "position": [
-        224,
-        448
+        -144,
+        464
       ]
     },
     {
@@ -24,8 +24,8 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        448,
-        448
+        64,
+        464
       ]
     },
     {
@@ -50,7 +50,7 @@
       "typeVersion": 4.4,
       "position": [
         672,
-        448
+        432
       ],
       "retryOnFail": true,
       "maxTries": 3,
@@ -73,7 +73,7 @@
       "typeVersion": 2,
       "position": [
         896,
-        448
+        432
       ]
     },
     {
@@ -101,8 +101,8 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.4,
       "position": [
-        1344,
-        176
+        1360,
+        160
       ],
       "retryOnFail": true,
       "maxTries": 3,
@@ -125,7 +125,7 @@
       "typeVersion": 2,
       "position": [
         1568,
-        176
+        160
       ]
     },
     {
@@ -154,7 +154,7 @@
       "typeVersion": 4.4,
       "position": [
         1792,
-        176
+        160
       ],
       "retryOnFail": true,
       "maxTries": 3,
@@ -177,7 +177,7 @@
       "typeVersion": 2,
       "position": [
         2016,
-        176
+        160
       ]
     },
     {
@@ -206,7 +206,7 @@
       "typeVersion": 4.4,
       "position": [
         2240,
-        176
+        160
       ],
       "retryOnFail": true,
       "maxTries": 3,
@@ -229,7 +229,7 @@
       "typeVersion": 2,
       "position": [
         2464,
-        176
+        160
       ]
     },
     {
@@ -258,7 +258,7 @@
       "typeVersion": 4.4,
       "position": [
         2688,
-        176
+        160
       ],
       "retryOnFail": true,
       "maxTries": 3,
@@ -281,7 +281,7 @@
       "typeVersion": 2,
       "position": [
         2912,
-        176
+        160
       ]
     },
     {
@@ -310,7 +310,7 @@
       "typeVersion": 4.4,
       "position": [
         3136,
-        176
+        160
       ],
       "retryOnFail": true,
       "maxTries": 3,
@@ -333,7 +333,7 @@
       "typeVersion": 2,
       "position": [
         3360,
-        176
+        160
       ]
     },
     {
@@ -366,7 +366,7 @@
       "typeVersion": 4.4,
       "position": [
         3584,
-        176
+        160
       ],
       "retryOnFail": true,
       "maxTries": 3,
@@ -381,7 +381,7 @@
     },
     {
       "parameters": {
-        "jsCode": "var inputItems = $input.all();\nvar firstInputJson = inputItems[0] ? (inputItems[0].json || {}) : {};\nvar retailItems = $('Process Daily Retail Infrastructure').all();\nvar geocodeItems = $('Process Geocode Result').all();\n\nvar payloadSource = firstInputJson;\nif (retailItems.length) {\n  payloadSource = retailItems[0].json || firstInputJson;\n} else if (firstInputJson.location_enrichment && firstInputJson.processing_metadata) {\n  payloadSource = firstInputJson;\n} else if (geocodeItems.length) {\n  payloadSource = geocodeItems[0].json || firstInputJson;\n}\n\nvar payload = JSON.parse(JSON.stringify(payloadSource || {}));\nvar runtime = payload._runtime && typeof payload._runtime === 'object' ? payload._runtime : {};\nvar errors = Array.isArray(runtime.enrichment_errors) ? runtime.enrichment_errors.slice() : [];\n\nvar routeMatrixElements = [];\nfor (var itemIndex = 0; itemIndex < inputItems.length; itemIndex += 1) {\n  var itemJson = inputItems[itemIndex] ? (inputItems[itemIndex].json || {}) : {};\n  if (itemJson && itemJson.location_enrichment && itemJson.processing_metadata) {\n    continue;\n  }\n  if (itemJson.error) {\n    errors.push('route_matrix:' + (itemJson.error.message || itemJson.error));\n  }\n  if (itemJson.destinationIndex != null) {\n    routeMatrixElements.push(itemJson);\n  }\n}\n\nfunction durationToMinutes(value) {\n  var minutes = null;\n  if (typeof value === 'string') {\n    var match = value.match(/^([0-9.]+)s$/);\n    if (match) {\n      var seconds = Number(match[1]);\n      minutes = Number.isFinite(seconds) ? Math.round(seconds / 60) : null;\n    }\n  }\n  return { value: minutes };\n}\n\nvar cityMinutes = null;\nvar trainMinutes = null;\nvar airportMinutes = null;\nfor (var routeIndex = 0; routeIndex < routeMatrixElements.length; routeIndex += 1) {\n  var element = routeMatrixElements[routeIndex];\n  if (!element || element.condition !== 'ROUTE_EXISTS') {\n    continue;\n  }\n  var minutes = durationToMinutes(element.duration).value;\n  if (minutes == null) {\n    continue;\n  }\n  if (element.destinationIndex === 0) cityMinutes = minutes;\n  if (element.destinationIndex === 1) trainMinutes = minutes;\n  if (element.destinationIndex === 2) airportMinutes = minutes;\n}\n\npayload.location_enrichment.distance_city_center_min = cityMinutes;\npayload.location_enrichment.distance_train_station_min = trainMinutes;\npayload.location_enrichment.distance_airport_min = airportMinutes;\npayload.location_enrichment.aerial_image_url = null;\n\nvar infrastructure = [];\nvar runtimeInfrastructure = Array.isArray(runtime.infrastructure) ? runtime.infrastructure : [];\nfor (var infraIndex = 0; infraIndex < runtimeInfrastructure.length; infraIndex += 1) {\n  var entry = runtimeInfrastructure[infraIndex];\n  if (entry && (entry.name || entry.address)) infrastructure.push(entry);\n}\npayload.location_enrichment.infrastructure = infrastructure;\n\nvar counts = { education: 0, healthcare: 0, retail: 0, other: 0 };\nfor (var countIndex = 0; countIndex < infrastructure.length; countIndex += 1) {\n  var infraEntry = infrastructure[countIndex];\n  var category = infraEntry.category || 'other';\n  if (Object.prototype.hasOwnProperty.call(counts, category)) counts[category] += 1;\n  else counts.other += 1;\n}\n\nvar address = payload.address && typeof payload.address === 'object' ? payload.address : {};\nvar generatedLocationSummary = [];\nif (address.city) generatedLocationSummary.push('Micro-location in ' + address.city);\nif (trainMinutes != null) generatedLocationSummary.push('nearest train station about ' + trainMinutes + ' min by public transport');\nif (airportMinutes != null) generatedLocationSummary.push('airport about ' + airportMinutes + ' min by public transport');\nif (counts.education) generatedLocationSummary.push(String(counts.education) + ' education POIs found nearby');\nif (counts.healthcare) generatedLocationSummary.push(String(counts.healthcare) + ' healthcare POIs found nearby');\nif (counts.retail) generatedLocationSummary.push(String(counts.retail) + ' retail POIs found nearby');\nif (runtime.expose_location_description) payload.location_enrichment.location_description = runtime.expose_location_description;\nelse if (generatedLocationSummary.length) payload.location_enrichment.location_description = generatedLocationSummary.join('; ');\nelse payload.location_enrichment.location_description = null;\n\nvar publicTransportSummary = [];\nif (cityMinutes != null) publicTransportSummary.push('city center about ' + cityMinutes + ' min');\nif (trainMinutes != null) publicTransportSummary.push('train station about ' + trainMinutes + ' min');\nif (airportMinutes != null) publicTransportSummary.push('airport about ' + airportMinutes + ' min');\npayload.location_enrichment.public_transport_access = publicTransportSummary.length ? publicTransportSummary.join('; ') : null;\n\npayload._runtime = {\n  ...runtime,\n  enrichment_errors: Array.from(new Set(errors)),\n  enrichment_failed: Boolean(runtime.enrichment_attempted && (payload.location_enrichment.latitude == null || payload.location_enrichment.longitude == null || errors.length > 0))\n};\n\nreturn [{ json: payload }];"
+        "jsCode": "var inputItems = $input.all();\nvar firstInputJson = inputItems[0] ? (inputItems[0].json || {}) : {};\n\nvar retailItems = [];\ntry { retailItems = $('Process Daily Retail Infrastructure').all(); } catch (e) { /* node not executed */ }\nvar geocodeItems = [];\ntry { geocodeItems = $('Process Geocode Result').all(); } catch (e) { /* node not executed */ }\n\nvar payloadSource = firstInputJson;\nif (retailItems.length) {\n  payloadSource = retailItems[0].json || firstInputJson;\n} else if (firstInputJson.location_enrichment && firstInputJson.processing_metadata) {\n  payloadSource = firstInputJson;\n} else if (geocodeItems.length) {\n  payloadSource = geocodeItems[0].json || firstInputJson;\n}\n\nvar payload = JSON.parse(JSON.stringify(payloadSource || {}));\nvar runtime = payload._runtime && typeof payload._runtime === 'object' ? payload._runtime : {};\nvar errors = Array.isArray(runtime.enrichment_errors) ? runtime.enrichment_errors.slice() : [];\n\nvar routeMatrixElements = [];\nfor (var itemIndex = 0; itemIndex < inputItems.length; itemIndex += 1) {\n  var itemJson = inputItems[itemIndex] ? (inputItems[itemIndex].json || {}) : {};\n  if (itemJson && itemJson.location_enrichment && itemJson.processing_metadata) {\n    continue;\n  }\n  if (itemJson.error) {\n    errors.push('route_matrix:' + (itemJson.error.message || itemJson.error));\n  }\n  if (itemJson.destinationIndex != null) {\n    routeMatrixElements.push(itemJson);\n  }\n}\n\nfunction durationToMinutes(value) {\n  var minutes = null;\n  if (typeof value === 'string') {\n    var match = value.match(/^([0-9.]+)s$/);\n    if (match) {\n      var seconds = Number(match[1]);\n      minutes = Number.isFinite(seconds) ? Math.round(seconds / 60) : null;\n    }\n  }\n  return { value: minutes };\n}\n\nvar cityMinutes = null;\nvar trainMinutes = null;\nvar airportMinutes = null;\nfor (var routeIndex = 0; routeIndex < routeMatrixElements.length; routeIndex += 1) {\n  var element = routeMatrixElements[routeIndex];\n  if (!element || element.condition !== 'ROUTE_EXISTS') {\n    continue;\n  }\n  var minutes = durationToMinutes(element.duration).value;\n  if (minutes == null) {\n    continue;\n  }\n  if (element.destinationIndex === 0) cityMinutes = minutes;\n  if (element.destinationIndex === 1) trainMinutes = minutes;\n  if (element.destinationIndex === 2) airportMinutes = minutes;\n}\n\npayload.location_enrichment.distance_city_center_min = cityMinutes;\npayload.location_enrichment.distance_train_station_min = trainMinutes;\npayload.location_enrichment.distance_airport_min = airportMinutes;\npayload.location_enrichment.aerial_image_url = null;\n\nvar infrastructure = [];\nvar runtimeInfrastructure = Array.isArray(runtime.infrastructure) ? runtime.infrastructure : [];\nfor (var infraIndex = 0; infraIndex < runtimeInfrastructure.length; infraIndex += 1) {\n  var entry = runtimeInfrastructure[infraIndex];\n  if (entry && (entry.name || entry.address)) infrastructure.push(entry);\n}\npayload.location_enrichment.infrastructure = infrastructure;\n\nvar counts = { education: 0, healthcare: 0, retail: 0, other: 0 };\nfor (var countIndex = 0; countIndex < infrastructure.length; countIndex += 1) {\n  var infraEntry = infrastructure[countIndex];\n  var category = infraEntry.category || 'other';\n  if (Object.prototype.hasOwnProperty.call(counts, category)) counts[category] += 1;\n  else counts.other += 1;\n}\n\nvar address = payload.address && typeof payload.address === 'object' ? payload.address : {};\nvar generatedLocationSummary = [];\nif (address.city) generatedLocationSummary.push('Micro-location in ' + address.city);\nif (trainMinutes != null) generatedLocationSummary.push('nearest train station about ' + trainMinutes + ' min by public transport');\nif (airportMinutes != null) generatedLocationSummary.push('airport about ' + airportMinutes + ' min by public transport');\nif (counts.education) generatedLocationSummary.push(String(counts.education) + ' education POIs found nearby');\nif (counts.healthcare) generatedLocationSummary.push(String(counts.healthcare) + ' healthcare POIs found nearby');\nif (counts.retail) generatedLocationSummary.push(String(counts.retail) + ' retail POIs found nearby');\nif (runtime.expose_location_description) payload.location_enrichment.location_description = runtime.expose_location_description;\nelse if (generatedLocationSummary.length) payload.location_enrichment.location_description = generatedLocationSummary.join('; ');\nelse payload.location_enrichment.location_description = null;\n\nvar publicTransportSummary = [];\nif (cityMinutes != null) publicTransportSummary.push('city center about ' + cityMinutes + ' min');\nif (trainMinutes != null) publicTransportSummary.push('train station about ' + trainMinutes + ' min');\nif (airportMinutes != null) publicTransportSummary.push('airport about ' + airportMinutes + ' min');\npayload.location_enrichment.public_transport_access = publicTransportSummary.length ? publicTransportSummary.join('; ') : null;\n\npayload._runtime = {\n  ...runtime,\n  enrichment_errors: Array.from(new Set(errors)),\n  enrichment_failed: Boolean(runtime.enrichment_attempted && (payload.location_enrichment.latitude == null || payload.location_enrichment.longitude == null || errors.length > 0))\n};\n\nreturn [{ json: payload }];"
       },
       "id": "finalize-location",
       "name": "Finalize Location Enrichment",
@@ -396,10 +396,10 @@
       "parameters": {
         "conditions": {
           "options": {
-            "version": 2,
-            "leftValue": "",
             "caseSensitive": true,
-            "typeValidation": "strict"
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
           },
           "conditions": [
             {
@@ -423,15 +423,15 @@
       "typeVersion": 2.3,
       "position": [
         1120,
-        448
+        416
       ],
       "onError": "continueErrorOutput"
     },
     {
       "parameters": {
-        "content": "## README\n- Owner: Richard Berenczei / richard.berenczei@pwc.com\n- Dependencies: BIG Google Maps Geocoding credential, BIG Google Maps Places & Routes credential\n- Logic Summary: Geocode the extracted address, enrich transport and nearby infrastructure context, and return a non-blocking enrichment payload for the core workflow.",
-        "height": 124,
-        "width": 1172,
+        "content": "## README\n- Owner: Richard Berenczei / richard.berenczei@pwc.com\n- Dependencies: BIG Google Maps Geocoding credential, BIG Google Maps Places & Routes credential\n- Logic Summary: Geocode the extracted address, query nearby transport and infrastructure POIs via Google APIs, calculate transit times, and return a non-blocking enrichment payload.\n\n## Input Contract\nCalled via `executeWorkflow` from Processing Core. Expects the full extraction payload with at minimum:\n```\n{ address: { country, postal_code, city, street, house_number },\n  location_enrichment: { ... },\n  _runtime: { ... } }\n```\n\n## Output Contract\nReturns the same payload with `location_enrichment` populated:\n```\nlocation_enrichment: {\n  latitude, longitude, aerial_image_url,\n  location_description, public_transport_access,\n  distance_city_center_min, distance_train_station_min,\n  distance_airport_min, infrastructure: [...]\n}\n```\nIf geocoding fails or no coordinates are available, all location fields are returned as `null` with an empty infrastructure array.\n\n## Decision Gates\n1. **Meaningful Address Available?** — skips geocoding entirely if address lacks street-level detail\n2. **Coordinates Available?** — skips infrastructure lookups if geocoding returned no coordinates\n\n## Error Behavior\n- All API failures are **non-blocking**: the workflow always returns a valid payload\n- Errors are collected in `_runtime.enrichment_errors[]`\n- `_runtime.enrichment_failed` is set to `true` if coordinates are missing or errors occurred",
+        "height": 832,
+        "width": 908,
         "color": 7
       },
       "id": "a6b5de67-487d-4e45-9ba3-5a1ee0bf4890",
@@ -440,14 +440,14 @@
       "typeVersion": 1,
       "position": [
         -176,
-        32
+        -560
       ]
     },
     {
       "parameters": {
         "content": "## Trigger / Input\nBlue section: receive the extracted payload, normalize enrichment state, and geocode the full address.",
-        "height": 320,
-        "width": 840,
+        "height": 352,
+        "width": 1224,
         "color": 5
       },
       "id": "62923a65-209d-4f33-ada3-6b3c889e0e01",
@@ -455,8 +455,8 @@
       "type": "n8n-nodes-base.stickyNote",
       "typeVersion": 1,
       "position": [
-        192,
-        368
+        -192,
+        336
       ]
     },
     {
@@ -472,13 +472,13 @@
       "typeVersion": 1,
       "position": [
         1040,
-        80
+        48
       ]
     },
     {
       "parameters": {
         "content": "## Error / Recovery\nRed section: keep geocoding or downstream API failures non-blocking and still emit a valid enrichment object with null fallbacks.",
-        "height": 320,
+        "height": 352,
         "width": 2880,
         "color": 3
       },
@@ -488,18 +488,10 @@
       "typeVersion": 1,
       "position": [
         1040,
-        368
+        336
       ]
     },
     {
-      "id": "meaningful-address-check",
-      "name": "Meaningful Address Available?",
-      "type": "n8n-nodes-base.if",
-      "typeVersion": 2.3,
-      "position": [
-        672,
-        320
-      ],
       "parameters": {
         "conditions": {
           "options": {
@@ -524,6 +516,14 @@
         },
         "options": {}
       },
+      "id": "meaningful-address-check",
+      "name": "Meaningful Address Available?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        272,
+        448
+      ],
       "onError": "continueErrorOutput"
     }
   ],
