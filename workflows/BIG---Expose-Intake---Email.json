@@ -52,8 +52,8 @@
     },
     {
       "parameters": {
-        "content": "## README\n- Owner: Richard Berenczei / richard.berenczei@pwc.com\n- Dependencies: IMAP credential, BIG - Expose Processing Core sub-workflow\n- Logic Summary: Watch the exposé mailbox, split PDF attachments into one item per file, and hand each PDF to the shared extraction core.",
-        "height": 140,
+        "content": "## README\n- Owner: Richard Berenczei / richard.berenczei@pwc.com\n- Status: **Draft** — not yet activated for production use\n- Dependencies: IMAP credential, BIG - Expose Processing Core sub-workflow\n- Logic Summary: Poll the configured inbox for new emails, extract all PDF attachments (one item per PDF), normalize each into the shared intake contract, and dispatch to the extraction core.\n\n## Input Contract\n- **Trigger:** IMAP email poll with `downloadAttachments: true`\n- No programmatic input — watches a mailbox automatically\n\n## Output Contract\nReturns one Processing Core result per PDF attachment found in the email.\n\n## Normalized Handoff to Core\n`{ source_filename, ingestion_channel: \"email\", received_date, duplicate_mode: \"overwrite\", persist_result: true, persistence_mode: \"postgres\", email_subject, email_from }` + binary key `pdf`\n\n## Error Behavior\n- Silently skips non-PDF attachments (no error, just filtered out)\n- If an email has zero PDF attachments, no items are emitted\n- Downstream errors are handled by the Processing Core and the global Error Handler (PIlbEFexoMxalpwB)\n\n## Known Limitations\n- `duplicate_mode` is hardcoded to `overwrite` — no per-email override\n- Emails with multiple PDFs produce independent pipeline runs with no shared context",
+        "height": 708,
         "width": 974,
         "color": 7
       },
@@ -62,8 +62,8 @@
       "type": "n8n-nodes-base.stickyNote",
       "typeVersion": 1,
       "position": [
-        -208,
-        -80
+        -512,
+        -608
       ]
     },
     {
