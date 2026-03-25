@@ -82,9 +82,9 @@
     },
     {
       "parameters": {
-        "content": "## README\n- Owner: Richard Berenczei / richard.berenczei@pwc.com\n- Dependencies: Form Trigger, BIG - Expose Processing Core sub-workflow\n- Logic Summary: Accept a manual PDF upload, normalize the payload, and hand off to the shared extraction core.",
-        "height": 124,
-        "width": 804,
+        "content": "## README\n- Owner: Richard Berenczei / richard.berenczei@pwc.com\n- Dependencies: Form Trigger, BIG - Expose Processing Core sub-workflow\n- Logic Summary: Accept a manual PDF upload via n8n form, normalize the payload into the shared intake contract, and hand off to the extraction core. Returns the core's final result to the form response.\n\n## Input Contract\n- **Trigger:** n8n Form with fields `Expose PDF` (file, required) and `Duplicate Mode` (dropdown: overwrite/skip/reprocess)\n- No programmatic input — this is an operator-facing entry point\n\n## Output Contract\nReturns the Processing Core's final JSON payload directly as the form response (via `responseMode: lastNode`).\n\n## Normalized Handoff to Core\n`{ source_filename, ingestion_channel: \"form\", received_date, duplicate_mode, persist_result: true, persistence_mode: \"postgres\" }` + binary key `pdf`\n\n## Error Behavior\n- Throws if the form submission contains no PDF attachment\n- All downstream errors are handled by the Processing Core and the global Error Handler (PIlbEFexoMxalpwB)",
+        "height": 556,
+        "width": 908,
         "color": 7
       },
       "id": "3f014940-2cf1-440e-8f1e-a6481d47b166",
@@ -92,8 +92,8 @@
       "type": "n8n-nodes-base.stickyNote",
       "typeVersion": 1,
       "position": [
-        -176,
-        -64
+        -464,
+        -416
       ]
     },
     {
@@ -115,7 +115,7 @@
       "parameters": {
         "content": "## Success Path\nGreen section: normalize uploaded form data into the shared contract and dispatch to the processing core.",
         "height": 316,
-        "width": 456,
+        "width": 488,
         "color": 4
       },
       "id": "7441449a-0398-4c0b-8f80-eb960f4ccca6",
