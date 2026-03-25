@@ -72,7 +72,7 @@
       "typeVersion": 4.4,
       "position": [
         1200,
-        336
+        416
       ],
       "credentials": {
         "githubApi": {
@@ -92,7 +92,7 @@
       "typeVersion": 2,
       "position": [
         1424,
-        336
+        416
       ]
     },
     {
@@ -125,7 +125,7 @@
       "typeVersion": 4.4,
       "position": [
         1696,
-        336
+        416
       ],
       "credentials": {
         "githubApi": {
@@ -143,8 +143,8 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        1904,
-        384
+        1696,
+        272
       ]
     },
     {
@@ -199,7 +199,7 @@
       "parameters": {
         "content": "## Success Path (continued)\nGreen section: check if each file already exists on GitHub (to get its SHA for updates), build commit messages with version metadata, push via GitHub Contents API, and aggregate a backup summary.",
         "height": 496,
-        "width": 1044,
+        "width": 836,
         "color": 4
       },
       "id": "github-section-note",
