@@ -439,7 +439,7 @@
       "type": "n8n-nodes-base.stickyNote",
       "typeVersion": 1,
       "position": [
-        -176,
+        -192,
         -560
       ]
     },
@@ -447,7 +447,7 @@
       "parameters": {
         "content": "## Trigger / Input\nBlue section: receive the extracted payload, normalize enrichment state, and geocode the full address.",
         "height": 352,
-        "width": 1224,
+        "width": 1480,
         "color": 5
       },
       "id": "62923a65-209d-4f33-ada3-6b3c889e0e01",
@@ -463,7 +463,7 @@
       "parameters": {
         "content": "## Success Path\nGreen section: when coordinates exist, collect nearby transport and infrastructure context from Google APIs.",
         "height": 284,
-        "width": 2872,
+        "width": 2584,
         "color": 4
       },
       "id": "f9d58eec-a0d2-4e4e-9600-55b17d81de68",
@@ -471,7 +471,7 @@
       "type": "n8n-nodes-base.stickyNote",
       "typeVersion": 1,
       "position": [
-        1040,
+        1296,
         48
       ]
     },
@@ -479,7 +479,7 @@
       "parameters": {
         "content": "## Error / Recovery\nRed section: keep geocoding or downstream API failures non-blocking and still emit a valid enrichment object with null fallbacks.",
         "height": 352,
-        "width": 2880,
+        "width": 2592,
         "color": 3
       },
       "id": "313ab4af-689c-44c7-895a-f9ad6afb79e5",
@@ -487,7 +487,7 @@
       "type": "n8n-nodes-base.stickyNote",
       "typeVersion": 1,
       "position": [
-        1040,
+        1296,
         336
       ]
     },
