@@ -63,7 +63,7 @@
       "parameters": {
         "content": "## README\n- Owner: Richard Berenczei / richard.berenczei@pwc.com\n- Dependencies: BIG Postgres credential with DDL rights\n- Logic Summary: Bootstrap the extraction table and indexes, then run a smoke-test query to verify the DB layer is operational.\n\n## Setup\n1. Ensure the **Postgres** credential is configured and has `CREATE TABLE` / `CREATE INDEX` permissions\n2. Run this workflow manually once before first use of the pipeline\n3. Re-running is safe — all statements use `CREATE ... IF NOT EXISTS`\n\n## Table Schema\n```\nreal_estate_extractions (\n  document_id       TEXT PRIMARY KEY,\n  source_filename   TEXT,\n  ingestion_channel TEXT,\n  status            TEXT,\n  received_date     DATE,\n  processed_at      TIMESTAMPTZ,\n  payload_jsonb     JSONB NOT NULL,\n  validation_errors_jsonb JSONB NOT NULL DEFAULT '[]'\n)\n```\nIndexes: `status`, `processed_at DESC`\n\n## Verify Node\nThe \"Verify Stored Payload\" node queries a specific `document_id` as a smoke test. The hardcoded hash is from an early test run — it will return zero rows on a fresh database, which is expected and not an error.\n\n## Error Behavior\n- Throws on DB connection or permission errors — fix credentials before running the pipeline",
         "height": 796,
-        "width": 724,
+        "width": 1044,
         "color": 7
       },
       "id": "b1014602-3877-4a83-9d32-69013214e65c",
