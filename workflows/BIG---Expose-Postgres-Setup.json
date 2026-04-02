@@ -1,78 +1,78 @@
 {
-  "id": "Yl9sWiQKfyJqc3Zl",
+  "id": "ZiEDf907FSembauu",
   "name": "BIG - Expose Postgres Setup",
   "nodes": [
     {
       "parameters": {},
-      "id": "manual-trigger",
+      "id": "b18c38e7-bc91-40fe-bc71-1919af0ac366",
       "name": "Run Setup Manually",
       "type": "n8n-nodes-base.manualTrigger",
       "typeVersion": 1,
       "position": [
-        240,
-        304
+        592,
+        880
       ]
     },
     {
       "parameters": {
         "operation": "executeQuery",
-        "query": "create table if not exists public.real_estate_extractions (\n  document_id text primary key,\n  source_filename text,\n  ingestion_channel text,\n  status text,\n  received_date date,\n  processed_at timestamptz,\n  payload_jsonb jsonb not null,\n  validation_errors_jsonb jsonb not null default '[]'::jsonb\n);\n\ncreate index if not exists real_estate_extractions_status_idx\n  on public.real_estate_extractions (status);\n\ncreate index if not exists real_estate_extractions_processed_at_idx\n  on public.real_estate_extractions (processed_at desc);",
+        "query": "CREATE SCHEMA IF NOT EXISTS n8n;\n\nCREATE TABLE IF NOT EXISTS n8n.exposes (\n  id int4 GENERATED ALWAYS AS IDENTITY( INCREMENT BY 1 MINVALUE 1 MAXVALUE 2147483647 START 1 CACHE 1 NO CYCLE) NOT NULL,\n  json_payload json NULL,\n  cr_date timestamp DEFAULT now() NULL,\n  pdf_hash varchar NULL,\n  pdf_data bytea NULL,\n  pdf_filename text NULL,\n  pdf_mime_type text DEFAULT 'application/pdf'::text NULL,\n  pdf_size_bytes int8 NULL,\n  CONSTRAINT newtable_pk PRIMARY KEY (id)\n);\n\nCREATE INDEX IF NOT EXISTS exposes_pdf_hash_idx ON n8n.exposes (pdf_hash);\nCREATE INDEX IF NOT EXISTS exposes_cr_date_idx ON n8n.exposes (cr_date DESC);",
         "options": {
           "queryBatching": "single",
           "largeNumbersOutput": "numbers",
           "replaceEmptyStrings": true
         }
       },
-      "id": "create-table",
+      "id": "ad5dff03-865b-4071-a31c-3cec3bb7827a",
       "name": "Create Extraction Table",
       "type": "n8n-nodes-base.postgres",
       "typeVersion": 2.6,
       "position": [
-        464,
-        304
+        816,
+        880
       ],
       "credentials": {
         "postgres": {
-          "id": "8kAoaYBVjLxUvCWQ",
-          "name": "BIG Postgres"
+          "id": "MVM5oN5EAOUZFjaG",
+          "name": "Postgres"
         }
       }
     },
     {
       "parameters": {
         "operation": "executeQuery",
-        "query": "select\n  document_id,\n  payload_jsonb\nfrom public.real_estate_extractions\nwhere document_id = 'bee264d1ffaf9cc4338b795d1d0e58a4d8c6783c87cd370f2694067cdf33b7b0';",
+        "query": "SELECT id, json_payload, pdf_hash, pdf_filename, cr_date\nFROM n8n.exposes\nORDER BY cr_date DESC LIMIT 5;",
         "options": {}
       },
       "type": "n8n-nodes-base.postgres",
       "typeVersion": 2.6,
       "position": [
-        688,
-        304
+        1040,
+        880
       ],
-      "id": "210807f0-cd25-47bd-965c-3448ada3a1a2",
+      "id": "ca48c079-c60c-4b4e-9d93-e7de74786709",
       "name": "Verify Stored Payload",
       "credentials": {
         "postgres": {
-          "id": "8kAoaYBVjLxUvCWQ",
-          "name": "BIG Postgres"
+          "id": "MVM5oN5EAOUZFjaG",
+          "name": "Postgres"
         }
       }
     },
     {
       "parameters": {
-        "content": "## README\n- Owner: Richard Berenczei / richard.berenczei@pwc.com\n- Dependencies: BIG Postgres credential with DDL rights\n- Logic Summary: Bootstrap the extraction table and indexes, then run a smoke-test query to verify the DB layer is operational.\n\n## Setup\n1. Ensure the **Postgres** credential is configured and has `CREATE TABLE` / `CREATE INDEX` permissions\n2. Run this workflow manually once before first use of the pipeline\n3. Re-running is safe — all statements use `CREATE ... IF NOT EXISTS`\n\n## Table Schema\n```\nreal_estate_extractions (\n  document_id       TEXT PRIMARY KEY,\n  source_filename   TEXT,\n  ingestion_channel TEXT,\n  status            TEXT,\n  received_date     DATE,\n  processed_at      TIMESTAMPTZ,\n  payload_jsonb     JSONB NOT NULL,\n  validation_errors_jsonb JSONB NOT NULL DEFAULT '[]'\n)\n```\nIndexes: `status`, `processed_at DESC`\n\n## Verify Node\nThe \"Verify Stored Payload\" node queries a specific `document_id` as a smoke test. The hardcoded hash is from an early test run — it will return zero rows on a fresh database, which is expected and not an error.\n\n## Error Behavior\n- Throws on DB connection or permission errors — fix credentials before running the pipeline",
-        "height": 796,
-        "width": 1044,
+        "content": "## README\n- Owner: Richard Berenczei / richard.berenczei@pwc.com\n- Dependencies: BIG Postgres credential with DDL rights\n- Logic Summary: Bootstrap the `n8n.exposes` table and indexes, then run a smoke-test query to verify the DB layer is operational.\n\n## Setup\n1. Ensure the **Postgres** credential is configured and has `CREATE SCHEMA` / `CREATE TABLE` / `CREATE INDEX` permissions\n2. Run this workflow manually once before first use of the pipeline\n3. Re-running is safe — all statements use `CREATE ... IF NOT EXISTS`\n\n## Table Schema\n```\nn8n.exposes (\n  id          INT4 GENERATED ALWAYS AS IDENTITY PRIMARY KEY,\n  json_payload JSON,\n  cr_date     TIMESTAMP DEFAULT now(),\n  pdf_hash    VARCHAR,\n  pdf_data    BYTEA,\n  pdf_filename TEXT,\n  pdf_mime_type TEXT DEFAULT 'application/pdf',\n  pdf_size_bytes INT8\n)\n```\nIndexes: `pdf_hash`, `cr_date DESC`\n\n## Verify Node\nThe \"Verify Stored Payload\" node queries the 5 most recent rows as a smoke test. It will return zero rows on a fresh database, which is expected.\n\n## Error Behavior\n- Throws on DB connection or permission errors — fix credentials before running the pipeline",
+        "height": 1148,
+        "width": 788,
         "color": 7
       },
-      "id": "b1014602-3877-4a83-9d32-69013214e65c",
+      "id": "a3a3021a-45b4-440e-8d7b-cb62a491b149",
       "name": "README",
       "type": "n8n-nodes-base.stickyNote",
       "typeVersion": 1,
       "position": [
-        -400,
-        -672
+        496,
+        -96
       ]
     },
     {
@@ -81,13 +81,13 @@
         "height": 284,
         "color": 5
       },
-      "id": "a7d8ad08-6f0a-437e-94b7-a74a1a77ac42",
+      "id": "1154f222-c25a-4ea3-aad6-dbc4e8f64ca2",
       "name": "Manual Utility",
       "type": "n8n-nodes-base.stickyNote",
       "typeVersion": 1,
       "position": [
-        160,
-        176
+        512,
+        752
       ]
     },
     {
@@ -97,13 +97,13 @@
         "width": 520,
         "color": 4
       },
-      "id": "58d46acf-0041-4b9d-9997-c685ec950caa",
+      "id": "63384d32-c121-4a00-bc09-38c7f19e4582",
       "name": "DDL & Verification",
       "type": "n8n-nodes-base.stickyNote",
       "typeVersion": 1,
       "position": [
-        400,
-        176
+        752,
+        752
       ]
     }
   ],
@@ -133,14 +133,12 @@
   },
   "settings": {
     "executionOrder": "v1",
-    "callerPolicy": "workflowsFromSameOwner",
+    "binaryMode": "separate",
     "availableInMCP": false,
-    "errorWorkflow": "PIlbEFexoMxalpwB"
+    "callerPolicy": "workflowsFromSameOwner"
   },
   "pinData": {},
   "tags": [
-    "BIG",
-    "Lifecycle: Production",
-    "Type: Utility"
+    "BIG"
   ]
 }
