@@ -1,99 +1,21 @@
 {
-  "id": "65EivHdogEPu9MUF",
+  "id": "IwXZO4KsCQuCIMLh",
   "name": "BIG - Expose Persistence",
   "nodes": [
     {
       "parameters": {
-        "inputSource": "passthrough"
-      },
-      "id": "persistence-trigger",
-      "name": "Receive Structured Payload",
-      "type": "n8n-nodes-base.executeWorkflowTrigger",
-      "typeVersion": 1.1,
-      "position": [
-        272,
-        304
-      ]
-    },
-    {
-      "parameters": {
-        "jsCode": "const items = $input.all();\n\nreturn items.map((item) => {\n  const payload = JSON.parse(JSON.stringify(item.json || {}));\n  const cleanPayload = JSON.parse(JSON.stringify(payload));\n  delete cleanPayload._runtime;\n\n  return {\n    json: {\n      document_id: cleanPayload.processing_metadata?.document_id ?? null,\n      source_filename: cleanPayload.processing_metadata?.source_filename ?? null,\n      ingestion_channel: cleanPayload.processing_metadata?.ingestion_channel ?? null,\n      status: cleanPayload.processing_metadata?.status ?? null,\n      received_date: cleanPayload.received_date ?? null,\n      processed_at: cleanPayload.processing_metadata?.processed_at ?? null,\n      payload_jsonb: cleanPayload,\n      validation_errors_jsonb: Array.isArray(cleanPayload.processing_metadata?.validation_errors)\n        ? cleanPayload.processing_metadata.validation_errors\n        : [],\n    },\n  };\n});"
-      },
-      "id": "prepare-persistence-payload",
-      "name": "Prepare Persistence Payload",
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
-      "position": [
-        512,
-        304
-      ]
-    },
-    {
-      "parameters": {
-        "operation": "upsert",
-        "schema": {
-          "mode": "name",
-          "value": "public"
-        },
-        "table": {
-          "mode": "name",
-          "value": "real_estate_extractions"
-        },
-        "columns": {
-          "mappingMode": "autoMapInputData",
-          "matchingColumns": [
-            "document_id"
-          ]
-        },
-        "options": {
-          "queryBatching": "single",
-          "largeNumbersOutput": "numbers",
-          "replaceEmptyStrings": true
-        }
-      },
-      "id": "upsert-extraction-record",
-      "name": "Upsert Extraction Record",
-      "type": "n8n-nodes-base.postgres",
-      "typeVersion": 2.6,
-      "position": [
-        720,
-        304
-      ],
-      "credentials": {
-        "postgres": {
-          "id": "8kAoaYBVjLxUvCWQ",
-          "name": "BIG Postgres"
-        }
-      },
-      "onError": "continueRegularOutput"
-    },
-    {
-      "parameters": {
-        "jsCode": "const items = $input.all();\nconst dbResult = items[0]?.json || {};\n\n// Get the original payload passed into this sub-workflow\nlet originalPayload = {};\ntry {\n  originalPayload = JSON.parse(JSON.stringify(($('Receive Structured Payload').first()?.json) || {}));\n} catch (e) {\n  // Fallback: reconstruct from DB result if cross-node reference fails\n  originalPayload = dbResult.payload_jsonb || dbResult || {};\n}\n\nconst runtime = originalPayload._runtime && typeof originalPayload._runtime === 'object' ? originalPayload._runtime : {};\n\noriginalPayload._runtime = {\n  ...runtime,\n  persistence_attempted: true,\n  persistence_error: dbResult.error?.message || dbResult.error || null,\n};\n\nreturn [{ json: originalPayload }];"
-      },
-      "id": "Return Persistence Result",
-      "name": "Return Persistence Result",
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
-      "position": [
-        944,
-        304
-      ]
-    },
-    {
-      "parameters": {
-        "content": "## README\n- Owner: Richard Berenczei / richard.berenczei@pwc.com\n- Dependencies: BIG Postgres credential, `real_estate_extractions` table (created by Postgres Setup workflow)\n- Logic Summary: Prepare the canonical JSON payload for storage — strip `_runtime` helper fields — and upsert into Postgres. Returns the original payload with persistence metadata.\n\n## Input Contract\nCalled via `executeWorkflow` from Processing Core or Error Handler. Expects the full extraction payload with `processing_metadata.document_id` as the upsert key.\n\n## Output Contract\nReturns the **original input payload** (including `_runtime`) with two fields added:\n```\n_runtime.persistence_attempted: true\n_runtime.persistence_error: null | \"error message\"\n```\n\n## Upsert Details\n- Table: `public.real_estate_extractions`\n- Match column: `document_id`\n- Stored columns: `document_id`, `source_filename`, `ingestion_channel`, `status`, `received_date`, `processed_at`, `payload_jsonb` (full payload without `_runtime`), `validation_errors_jsonb`\n\n## Error Behavior\n- DB errors are caught via `continueOnFail` — the workflow never throws\n- On DB failure, `_runtime.persistence_error` contains the error message\n- The original payload is always returned for downstream continuity",
+        "content": "## README\n- Owner: Richard Berenczei / richard.berenczei@pwc.com\n- Dependencies: BIG Postgres credential, `n8n.exposes` table (created by Postgres Setup workflow)\n- Logic Summary: Prepare the canonical JSON payload for storage, keep it as a JSON object, and insert it into Postgres together with the original PDF bytes. Returns the original payload with persistence metadata.\n\n## Input Contract\nCalled via `executeWorkflow` from Processing Core or Error Handler. Expects the full extraction payload with `processing_metadata.document_id` as pdf_hash and `_runtime.pdf_base64` for binary storage.\n\n## Output Contract\nReturns the **original input payload** (including `_runtime`) with two fields added:\n```\n_runtime.persistence_attempted: true\n_runtime.persistence_error: null | \"error message\"\n```\n\n## Insert Details\n- Schema: `n8n`, Table: `exposes`\n- Columns: `json_payload` (JSON object), `pdf_hash`, `pdf_data`, `pdf_filename`, `pdf_mime_type`, `pdf_size_bytes`\n- `id` and `cr_date` are auto-populated by the database\n\n## Error Behavior\n- DB errors are caught via `continueOnFail` \\u2014 the workflow never throws\n- On DB failure, `_runtime.persistence_error` contains the error message\n- The original payload is always returned for downstream continuity",
         "height": 704,
         "width": 908,
         "color": 7
       },
-      "id": "eea46aa5-217c-4e03-aab7-880a972fa24c",
+      "id": "9659c9f3-4d58-42f3-8e29-fc9ebfa8194f",
       "name": "README",
       "type": "n8n-nodes-base.stickyNote",
       "typeVersion": 1,
       "position": [
-        -352,
-        -608
+        -96,
+        -112
       ]
     },
     {
@@ -103,13 +25,13 @@
         "width": 284,
         "color": 5
       },
-      "id": "a6201575-cfb3-4e3d-a8f5-1f0a28ea3040",
+      "id": "15a74e70-ea50-4a49-b381-654d9b584744",
       "name": "Persistence Input",
       "type": "n8n-nodes-base.stickyNote",
       "typeVersion": 1,
       "position": [
-        176,
-        176
+        432,
+        672
       ]
     },
     {
@@ -119,13 +41,79 @@
         "width": 656,
         "color": 4
       },
-      "id": "81b69a01-4f61-4284-8667-5f7ab10eb95b",
+      "id": "a563fb8f-88b1-4d72-b7d1-22a92af1d41a",
       "name": "DB Upsert",
       "type": "n8n-nodes-base.stickyNote",
       "typeVersion": 1,
       "position": [
-        464,
-        176
+        720,
+        672
+      ]
+    },
+    {
+      "parameters": {
+        "inputSource": "passthrough"
+      },
+      "id": "d32abc60-f7cd-4ce7-b0e5-3764c7af1cc0",
+      "name": "Receive Structured Payload",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1.1,
+      "position": [
+        528,
+        800
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const items = $input.all();\n\nfunction cleanString(value) {\n  if (value == null) return '';\n  const text = String(value).replace(/\\s+/g, ' ').trim();\n  return text || '';\n}\n\nfunction cleanMultiline(value) {\n  if (value == null) return '';\n  const text = String(value)\n    .replace(/\\r/g, '\\n')\n    .replace(/[ \\t]+/g, ' ')\n    .replace(/\\n{3,}/g, '\\n\\n')\n    .trim();\n  return text || '';\n}\n\nfunction cleanNumber(value) {\n  if (value == null || value === '') return '';\n  if (typeof value === 'number') {\n    return Number.isFinite(value) ? value : '';\n  }\n  let text = String(value)\n    .replace(/\\u00a0/g, ' ')\n    .replace(/\\u20ac/g, '')\n    .replace(/\\b(EUR|EURO|m\\u00b2|m2|qm|%|Stk\\.?|St\\.?|p\\.a\\.|pa)\\b/gi, '')\n    .replace(/--/g, '')\n    .replace(/,-/g, '')\n    .replace(/[^0-9,.-]/g, '');\n  if (!text || text === '-' || text === '--') return '';\n  if (text.includes(',') && text.includes('.')) {\n    text = text.replace(/\\./g, '').replace(',', '.');\n  } else if (text.includes(',')) {\n    text = text.replace(',', '.');\n  } else {\n    text = text.replace(/(\\d)\\.(?=\\d{3}(\\D|$))/g, '$1');\n  }\n  const parsed = Number(text);\n  return Number.isFinite(parsed) ? parsed : '';\n}\n\nfunction stringifyValue(value) {\n  if (value == null || value === '') return '';\n  if (typeof value === 'string') return cleanMultiline(value);\n  if (typeof value === 'number' || typeof value === 'boolean') return String(value);\n  if (Array.isArray(value)) return value.map(stringifyValue).filter(Boolean).join('\\n');\n  if (typeof value === 'object') return Object.values(value).map(stringifyValue).filter(Boolean).join('\\n');\n  return cleanMultiline(value);\n}\n\nfunction buildProviderContactString(value) {\n  if (!value) return '';\n  if (typeof value === 'string') return cleanMultiline(value);\n  const parts = [];\n  if (value.name) parts.push(cleanString(value.name));\n  if (value.company && cleanString(value.company) !== cleanString(value.name)) parts.push(cleanString(value.company));\n  if (value.phone) parts.push(cleanString(value.phone));\n  if (value.email) parts.push(cleanString(value.email));\n  return parts.filter(Boolean).join('\\n');\n}\n\nfunction deriveProjectName(source) {\n  const explicit = cleanString(source.Project_name || source.project_name);\n  if (explicit) return explicit;\n  const sourceAddress = buildMergedAddress(source);\n  return cleanString(sourceAddress['Stra\\u00dfe'] || sourceAddress.street);\n}\n\nfunction pickFirstNonEmpty(values) {\n  for (const candidate of values) {\n    const value = cleanString(candidate);\n    if (value) return value;\n  }\n  return '';\n}\n\nfunction buildMergedAddress(source) {\n  const rimAddress = source.Adresse && typeof source.Adresse === 'object' ? source.Adresse : {};\n  const canonicalAddress = source.address && typeof source.address === 'object' ? source.address : {};\n  return {\n    Land: pickFirstNonEmpty([rimAddress.Land, canonicalAddress.country]),\n    Bundesland: pickFirstNonEmpty([rimAddress.Bundesland, canonicalAddress.state]),\n    PLZ: pickFirstNonEmpty([rimAddress.PLZ, canonicalAddress.postal_code]),\n    Stadt: pickFirstNonEmpty([rimAddress.Stadt, canonicalAddress.city]),\n    Stra\\u00dfe: pickFirstNonEmpty([rimAddress['Stra\\u00dfe'], canonicalAddress.street]),\n    Hausnummer: pickFirstNonEmpty([rimAddress.Hausnummer, canonicalAddress.house_number]),\n    country: pickFirstNonEmpty([canonicalAddress.country, rimAddress.Land]),\n    state: pickFirstNonEmpty([canonicalAddress.state, rimAddress.Bundesland]),\n    postal_code: pickFirstNonEmpty([canonicalAddress.postal_code, rimAddress.PLZ]),\n    city: pickFirstNonEmpty([canonicalAddress.city, rimAddress.Stadt]),\n    street: pickFirstNonEmpty([canonicalAddress.street, rimAddress['Stra\\u00dfe']]),\n    house_number: pickFirstNonEmpty([canonicalAddress.house_number, rimAddress.Hausnummer]),\n  };\n}\n\nfunction normalizeCountry(value) {\n  const cleaned = cleanString(value);\n  if (!cleaned) return '\\u00d6sterreich';\n  if (/^austria$/i.test(cleaned) || /^\\u00f6sterreich$/i.test(cleaned)) return '\\u00d6sterreich';\n  return cleaned;\n}\n\nfunction deriveBundesland(address) {\n  const existing = cleanString(address['Bundesland'] || address.state);\n  if (existing) return existing;\n  const city = cleanString(address.Stadt || address.city).toLowerCase();\n  const postalCode = cleanString(address.PLZ || address.postal_code);\n  const cityMap = {\n    'wien': 'Wien',\n    'graz': 'Steiermark',\n    'salzburg': 'Salzburg',\n    'linz': 'Ober\\u00f6sterreich',\n    'innsbruck': 'Tirol',\n    'klagenfurt': 'K\\u00e4rnten',\n    'villach': 'K\\u00e4rnten',\n    'st. p\\u00f6lten': 'Nieder\\u00f6sterreich',\n    'st p\\u00f6lten': 'Nieder\\u00f6sterreich',\n    'wels': 'Ober\\u00f6sterreich',\n    'eisenstadt': 'Burgenland',\n    'bregenz': 'Vorarlberg',\n  };\n  if (cityMap[city]) return cityMap[city];\n  if (/^1\\d{3}$/.test(postalCode)) return 'Wien';\n  if (/^(2|3)\\d{3}$/.test(postalCode) || postalCode === '3100') return 'Nieder\\u00f6sterreich';\n  if (/^4\\d{3}$/.test(postalCode)) return 'Ober\\u00f6sterreich';\n  if (/^5\\d{3}$/.test(postalCode)) return 'Salzburg';\n  if (/^7\\d{3}$/.test(postalCode)) return 'Burgenland';\n  if (/^8\\d{3}$/.test(postalCode)) return 'Steiermark';\n  if (/^9\\d{3}$/.test(postalCode)) return 'K\\u00e4rnten';\n  return '';\n}\n\nfunction mapAssetClass(source) {\n  const existing = cleanString(source.Assetklasse);\n  if (existing) return existing;\n  const joined = [\n    source.asset_class,\n    source.property && source.property.property_type,\n    source.property && source.property.planned_use,\n    source.property && source.property.object_category,\n    source.notes,\n  ].map(cleanString).filter(Boolean).join(' ').toLowerCase();\n\n  if (!joined) return '';\n  if (/universit|hochschule|campus/.test(joined)) return 'Universit\\u00e4t';\n  if (/schule|kindergarten/.test(joined)) return 'Schule';\n  if (/sicherheit|polizei|feuerwehr|kaserne|gericht/.test(joined)) return 'Sicherheit';\n  if (/wohnen|wohn|residential|apartment|mehrfamilien|wohnung/.test(joined)) {\n    return 'Wohnen';\n  }\n  if (/b\\u00fcro|office/.test(joined)) return 'B\\u00fcro';\n  return '';\n}\n\nfunction findAnnualValue(text, label) {\n  if (!text) return '';\n  const lines = String(text).split('\\n');\n  for (const line of lines) {\n    if (!new RegExp(label, 'i').test(line) || !/p\\.a\\.|pa/i.test(line)) continue;\n    const matches = line.match(/[\\d.,]+/g) || [];\n    if (!matches.length) continue;\n    const candidate = cleanNumber(matches[0]);\n    if (candidate !== '') return candidate;\n  }\n  return '';\n}\n\nfunction mapToRim(source, runtime) {\n  const sourceAddress = buildMergedAddress(source);\n  const sourceAdditional = source['Zus\\u00e4tzliche_Informationen'] && typeof source['Zus\\u00e4tzliche_Informationen'] === 'object'\n    ? source['Zus\\u00e4tzliche_Informationen']\n    : {};\n  const sourceLage = source.Lagebeschreibung && typeof source.Lagebeschreibung === 'object' ? source.Lagebeschreibung : {};\n  const sourceInfra = sourceLage.Mikrolage_und_Infrastruktur && typeof sourceLage.Mikrolage_und_Infrastruktur === 'object'\n    ? sourceLage.Mikrolage_und_Infrastruktur\n    : {};\n  const sourceTraffic = sourceLage.Verkehrsanbindung && typeof sourceLage.Verkehrsanbindung === 'object'\n    ? sourceLage.Verkehrsanbindung\n    : {};\n  const sourceDistances = sourceLage.Entfernungen && typeof sourceLage.Entfernungen === 'object'\n    ? sourceLage.Entfernungen\n    : {};\n  const annualSoll = findAnnualValue(runtime.extracted_text, 'SOLL');\n  const annualIst = findAnnualValue(runtime.extracted_text, 'IST');\n\n  return {\n    Project_name: deriveProjectName(source),\n    Anbieter: cleanString(source.Anbieter || source.provider),\n    Kontaktdaten_Anbieter: buildProviderContactString(source.Kontaktdaten_Anbieter || source.provider_contact),\n    Eigent\\u00fcmer: cleanString(source['Eigent\\u00fcmer'] || source.owner),\n    Adresse: {\n      Land: normalizeCountry(sourceAddress.Land || sourceAddress.country),\n      Bundesland: deriveBundesland(sourceAddress),\n      PLZ: cleanString(sourceAddress.PLZ || sourceAddress.postal_code),\n      Stadt: cleanString(sourceAddress.Stadt || sourceAddress.city),\n      Stra\\u00dfe: cleanString(sourceAddress['Stra\\u00dfe'] || sourceAddress.street),\n      Hausnummer: cleanString(sourceAddress.Hausnummer || sourceAddress.house_number),\n    },\n    Assetklasse: mapAssetClass(source),\n    'Nutzfl\\u00e4che_m2': cleanNumber(source['Nutzfl\\u00e4che_m2'] != null ? source['Nutzfl\\u00e4che_m2'] : source.areas && source.areas.usable_area_m2),\n    'Grundst\\u00fccksfl\\u00e4che_m2': cleanNumber(source['Grundst\\u00fccksfl\\u00e4che_m2'] != null ? source['Grundst\\u00fccksfl\\u00e4che_m2'] : source.areas && source.areas.plot_area_m2),\n    SOLL_Mieteinnahme_EUR_p_a: annualSoll !== '' ? annualSoll : cleanNumber(source.SOLL_Mieteinnahme_EUR_p_a),\n    IST_Mieteinnahme_EUR_p_a: annualIst !== '' ? annualIst : cleanNumber(source.IST_Mieteinnahme_EUR_p_a),\n    Kaufpreisvorstellung_EUR: cleanNumber(source.Kaufpreisvorstellung_EUR != null ? source.Kaufpreisvorstellung_EUR : source.financials && source.financials.asking_price_eur),\n    'Kaufpreis_pro_m2_Nutzfl\\u00e4che_EUR': cleanNumber(source['Kaufpreis_pro_m2_Nutzfl\\u00e4che_EUR'] != null ? source['Kaufpreis_pro_m2_Nutzfl\\u00e4che_EUR'] : source.financials && source.financials.price_per_m2_usable_area),\n    'Kaufpreis_pro_m2_Grundst\\u00fcck_EUR': cleanNumber(source['Kaufpreis_pro_m2_Grundst\\u00fcck_EUR'] != null ? source['Kaufpreis_pro_m2_Grundst\\u00fcck_EUR'] : source.financials && source.financials.price_per_m2_land),\n    Objekttyp: cleanString(source.Objekttyp || source.property && (source.property.object_category || source.property.property_type)),\n    Eigentumsform: cleanString(source.Eigentumsform || source.property && source.property.ownership_type),\n    Bruttoanfangsrendite_IST: cleanNumber(source.Bruttoanfangsrendite_IST != null ? source.Bruttoanfangsrendite_IST : source.returns && source.returns.gross_initial_yield_actual),\n    Bruttoanfangsrendite_SOLL: cleanNumber(source.Bruttoanfangsrendite_SOLL != null ? source.Bruttoanfangsrendite_SOLL : source.returns && source.returns.gross_initial_yield_target),\n    'Zus\\u00e4tzliche_Informationen': {\n      Baujahr: cleanNumber(sourceAdditional.Baujahr != null ? sourceAdditional.Baujahr : source.property && source.property.construction_year),\n      Maklerprovision: cleanString(sourceAdditional.Maklerprovision != null ? sourceAdditional.Maklerprovision : source.financials && source.financials.broker_commission),\n      Denkmalschutz: stringifyValue(sourceAdditional.Denkmalschutz != null ? sourceAdditional.Denkmalschutz : source.property && source.property.heritage_protection),\n      Leerstand: cleanNumber(sourceAdditional.Leerstand != null ? sourceAdditional.Leerstand : source.property && source.property.vacancy),\n      'Stellpl\\u00e4tze': cleanNumber(sourceAdditional['Stellpl\\u00e4tze'] != null ? sourceAdditional['Stellpl\\u00e4tze'] : source.property && source.property.parking_spaces),\n    },\n    Lagebeschreibung: {\n      Makrolage: cleanMultiline(sourceLage.Makrolage || ''),\n      Mikrolage_und_Infrastruktur: {\n        Bildungsbauten: cleanString(sourceInfra.Bildungsbauten),\n        Medizinische_Versorgung: cleanString(sourceInfra.Medizinische_Versorgung),\n        'Einkaufsm\\u00f6glichkeiten': cleanString(sourceInfra['Einkaufsm\\u00f6glichkeiten']),\n      },\n      Umliegende_Bebauung: cleanString(sourceLage.Umliegende_Bebauung),\n      Verkehrsanbindung: {\n        Oeffentlicher_Verkehr: cleanString(sourceTraffic.Oeffentlicher_Verkehr),\n        Individualverkehr: cleanString(sourceTraffic.Individualverkehr),\n      },\n      Entfernungen: {\n        Naechster_Bahnhof: {\n          Bezeichnung: cleanString(sourceDistances.Naechster_Bahnhof && sourceDistances.Naechster_Bahnhof.Bezeichnung),\n          Entfernung: cleanString(sourceDistances.Naechster_Bahnhof && sourceDistances.Naechster_Bahnhof.Entfernung),\n        },\n        Ortsmitte: {\n          Bezeichnung: cleanString(sourceDistances.Ortsmitte && sourceDistances.Ortsmitte.Bezeichnung),\n          Entfernung: cleanString(sourceDistances.Ortsmitte && sourceDistances.Ortsmitte.Entfernung),\n        },\n        Flughafen: {\n          Bezeichnung: cleanString(sourceDistances.Flughafen && sourceDistances.Flughafen.Bezeichnung),\n          Entfernung: cleanString(sourceDistances.Flughafen && sourceDistances.Flughafen.Entfernung),\n        },\n      },\n    },\n  };\n}\n\nreturn items.map((item) => {\n  const payload = JSON.parse(JSON.stringify(item.json || {}));\n  const runtime = payload._runtime && typeof payload._runtime === 'object' ? payload._runtime : {};\n  const processingMetadata =\n    payload.processing_metadata && typeof payload.processing_metadata === 'object'\n      ? payload.processing_metadata\n      : {};\n\n  return {\n    json: {\n      json_payload: mapToRim(payload, runtime),\n      pdf_hash: processingMetadata.document_id ?? runtime.document_hash ?? null,\n      pdf_data: runtime.pdf_base64 ?? null,\n      pdf_filename: processingMetadata.source_filename ?? runtime.source_filename ?? null,\n      pdf_mime_type: runtime.pdf_mime_type ?? 'application/pdf',\n      pdf_size_bytes: runtime.pdf_size_bytes ?? null,\n    },\n  };\n});"
+      },
+      "id": "73a5f603-c011-4891-a394-532004a6a260",
+      "name": "Prepare Persistence Payload",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        880,
+        800
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "WITH updated AS (\n  UPDATE n8n.exposes\n  SET\n    json_payload = $1::jsonb,\n    pdf_data = CASE WHEN $3 IS NULL OR $3 = '' THEN NULL ELSE decode($3, 'base64') END,\n    pdf_filename = $4,\n    pdf_mime_type = $5,\n    pdf_size_bytes = $6\n  WHERE pdf_hash = $2\n  RETURNING *\n),\ninserted AS (\n  INSERT INTO n8n.exposes (\n    json_payload,\n    pdf_hash,\n    pdf_data,\n    pdf_filename,\n    pdf_mime_type,\n    pdf_size_bytes\n  )\n  SELECT\n    $1::jsonb,\n    $2,\n    CASE WHEN $3 IS NULL OR $3 = '' THEN NULL ELSE decode($3, 'base64') END,\n    $4,\n    $5,\n    $6\n  WHERE NOT EXISTS (SELECT 1 FROM updated)\n  RETURNING *\n)\nSELECT * FROM updated\nUNION ALL\nSELECT * FROM inserted;",
+        "options": {
+          "queryBatching": "single",
+          "queryReplacement": "={{ [JSON.stringify($json.json_payload), $json.pdf_hash, $json.pdf_data, $json.pdf_filename, $json.pdf_mime_type, $json.pdf_size_bytes] }}",
+          "largeNumbersOutput": "numbers",
+          "replaceEmptyStrings": true
+        }
+      },
+      "id": "d56de01c-3795-4f65-bd83-428a7e0b3e6d",
+      "name": "Store Expose Record",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        1088,
+        800
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "MVM5oN5EAOUZFjaG",
+          "name": "Postgres"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "const items = $input.all();\nconst dbResult = items[0]?.json || {};\n\n// Get the original payload passed into this sub-workflow\nlet originalPayload = {};\ntry {\n  originalPayload = JSON.parse(JSON.stringify(($('Receive Structured Payload').first()?.json) || {}));\n} catch (e) {\n  originalPayload = {};\n}\n\nif (!originalPayload || typeof originalPayload !== 'object' || Array.isArray(originalPayload)) {\n  originalPayload = {};\n}\n\nconst runtime = originalPayload._runtime && typeof originalPayload._runtime === 'object' ? originalPayload._runtime : {};\nconst persistenceError =\n  dbResult.error?.message ||\n  dbResult.error?.description ||\n  dbResult.message ||\n  dbResult.error ||\n  null;\n\noriginalPayload._runtime = {\n  ...runtime,\n  persistence_attempted: true,\n  persistence_error: persistenceError,\n};\n\nreturn [{ json: originalPayload }];"
+      },
+      "id": "e32dd625-93f3-46a0-aef8-6fd8608654ae",
+      "name": "Return Persistence Result",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1312,
+        800
       ]
     }
   ],
@@ -145,14 +133,14 @@
       "main": [
         [
           {
-            "node": "Upsert Extraction Record",
+            "node": "Store Expose Record",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Upsert Extraction Record": {
+    "Store Expose Record": {
       "main": [
         [
           {
@@ -166,14 +154,12 @@
   },
   "settings": {
     "executionOrder": "v1",
-    "callerPolicy": "workflowsFromSameOwner",
+    "binaryMode": "separate",
     "availableInMCP": false,
-    "errorWorkflow": "PIlbEFexoMxalpwB"
+    "callerPolicy": "workflowsFromSameOwner"
   },
   "pinData": {},
   "tags": [
-    "BIG",
-    "Lifecycle: Production",
-    "Type: Utility"
+    "BIG"
   ]
 }
