@@ -1,21 +1,68 @@
 {
-  "id": "i47lLprbx3UMXxew",
+  "id": "680XxthxMOQHWAUL",
   "name": "BIG - Expose Intake - Form",
   "nodes": [
     {
       "parameters": {
-        "formTitle": "BIG Real Estate Expose Intake",
-        "formDescription": "Upload a real estate exposé PDF to extract structured property data and location enrichment.",
+        "content": "## README\n- Owner: Richard Berenczei / richard.berenczei@pwc.com\n- Dependencies: Form Trigger, BIG - Expose Processing Core sub-workflow\n- Logic Summary: Accept one or more PDF uploads via n8n form, normalize each into the shared intake contract, and hand off to the extraction core. Returns the core's final result to the form response.\n\n## Input Contract\n- **Trigger:** n8n Form with fields `Expose PDFs` (file, required, multiple) and `Duplicate Mode` (dropdown: overwrite/skip)\n- No programmatic input \\u2014 this is an operator-facing entry point\n\n## Multi-PDF Support\nWhen multiple PDFs are uploaded, the normalize step emits one item per PDF. The Processing Core runs in `mode: each`, processing each PDF sequentially.\n\n## Output Contract\nReturns the Processing Core's final JSON payload(s) directly as the form response (via `responseMode: lastNode`).\n\n## Normalized Handoff to Core\n`{ source_filename, ingestion_channel: \"form\", received_date, duplicate_mode, persist_result: true, persistence_mode: \"postgres\" }` + binary key `pdf`\n\n## Error Behavior\n- Throws if the form submission contains no PDF attachment\n- All downstream errors are handled by the Processing Core and the global Error Handler",
+        "height": 828,
+        "width": 1868,
+        "color": 7
+      },
+      "id": "7ea08c66-b630-4efc-8fe9-ec9b6d6e8462",
+      "name": "README",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        48,
+        -48
+      ]
+    },
+    {
+      "parameters": {
+        "content": "## Trigger / Input\nBlue section: operator-facing upload entry point for ad hoc processing and smoke tests.",
+        "height": 316,
+        "color": 5
+      },
+      "id": "51b8bf50-73b8-408e-8309-191b9fd42e69",
+      "name": "Trigger & Input",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        688,
+        464
+      ]
+    },
+    {
+      "parameters": {
+        "content": "## Success Path\nGreen section: normalize uploaded form data into the shared contract and dispatch to the processing core.",
+        "height": 316,
+        "width": 984,
+        "color": 4
+      },
+      "id": "11420278-c4ab-4c94-b636-7313184af6e3",
+      "name": "Normalization & Handoff",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        928,
+        464
+      ]
+    },
+    {
+      "parameters": {
+        "formTitle": "BIG Immobilien-Exposé Eingang",
+        "formDescription": "Lade ein oder mehrere Immobilienexposés als PDF hoch, um strukturierte Objektdaten zu extrahieren und eine Standortanreicherung durchzuführen.",
         "formFields": {
           "values": [
             {
-              "fieldLabel": "Expose PDF",
+              "fieldLabel": "Immobilienexposés (PDFs)",
               "fieldType": "file",
               "acceptFileTypes": ".pdf",
               "requiredField": true
             },
             {
-              "fieldLabel": "Duplicate Mode",
+              "fieldLabel": "Duplikatsmodus",
               "fieldType": "dropdown",
               "fieldOptions": {
                 "values": [
@@ -24,9 +71,6 @@
                   },
                   {
                     "option": "skip"
-                  },
-                  {
-                    "option": "reprocess"
                   }
                 ]
               }
@@ -36,95 +80,58 @@
         "responseMode": "lastNode",
         "options": {}
       },
-      "id": "form-trigger",
+      "id": "caeb49c9-50da-4386-86ef-442d5296a497",
+      "webhookId": "6ac0dade-ecc8-4ef1-af54-0cd176d545cd",
       "name": "Expose Upload Form",
       "type": "n8n-nodes-base.formTrigger",
       "typeVersion": 2.5,
       "position": [
-        240,
-        320
-      ],
-      "webhookId": "9e793bb9-2639-491d-a1e2-bc8b0276d1f7"
+        752,
+        608
+      ]
     },
     {
       "parameters": {
-        "jsCode": "var inputItem = $input.first() || {};\nvar sourceJson = inputItem.json || {};\nvar sourceBinary = inputItem.binary || {};\nvar binaryKeys = Object.keys(sourceBinary);\nvar pdfKey = null;\nfor (var index = 0; index < binaryKeys.length; index += 1) {\n  var file = sourceBinary[binaryKeys[index]] || {};\n  var fileName = String(file.fileName || '').toLowerCase();\n  var mimeType = String(file.mimeType || '').toLowerCase();\n  if (mimeType === 'application/pdf' || fileName.endsWith('.pdf')) {\n    pdfKey = binaryKeys[index];\n    break;\n  }\n}\nif (!pdfKey) {\n  throw new Error('The form submission did not include a PDF file.');\n}\nvar duplicateMode = String(sourceJson['Duplicate Mode'] || sourceJson.duplicate_mode || 'overwrite').toLowerCase();\nif (['skip', 'overwrite', 'reprocess'].indexOf(duplicateMode) === -1) {\n  duplicateMode = 'overwrite';\n}\nvar submittedAt = sourceJson.submittedAt || sourceJson.submitted_at || null;\nreturn [{\n  json: {\n    source_filename: sourceBinary[pdfKey].fileName || 'form-upload.pdf',\n    ingestion_channel: 'form',\n    received_date: submittedAt,\n    duplicate_mode: duplicateMode,\n    persist_result: true,\n    persistence_mode: 'postgres'\n  },\n  binary: {\n    pdf: sourceBinary[pdfKey]\n  }\n}];"
+        "jsCode": "var inputItem = $input.first() || {};\nvar sourceJson = inputItem.json || {};\nvar sourceBinary = inputItem.binary || {};\nvar binaryKeys = Object.keys(sourceBinary);\n\n// Find all PDF binary keys\nvar pdfKeys = [];\nfor (var index = 0; index < binaryKeys.length; index += 1) {\n  var file = sourceBinary[binaryKeys[index]] || {};\n  var fileName = String(file.fileName || '').toLowerCase();\n  var mimeType = String(file.mimeType || '').toLowerCase();\n  if (mimeType === 'application/pdf' || fileName.endsWith('.pdf')) {\n    pdfKeys.push(binaryKeys[index]);\n  }\n}\nif (pdfKeys.length === 0) {\n  throw new Error('The form submission did not include any PDF files.');\n}\n\nvar duplicateMode = String(\n  sourceJson['Duplikatsmodus'] ||\n  sourceJson['Duplicate Mode'] ||\n  sourceJson.duplicate_mode ||\n  'overwrite'\n).toLowerCase();\nif (['skip', 'overwrite'].indexOf(duplicateMode) === -1) {\n  duplicateMode = 'overwrite';\n}\nvar submittedAt = sourceJson.submittedAt || sourceJson.submitted_at || null;\n\n// Emit one item per PDF\nvar results = [];\nfor (var pdfIdx = 0; pdfIdx < pdfKeys.length; pdfIdx += 1) {\n  var pdfKey = pdfKeys[pdfIdx];\n  results.push({\n    json: {\n      source_filename: sourceBinary[pdfKey].fileName || 'form-upload-' + (pdfIdx + 1) + '.pdf',\n      ingestion_channel: 'form',\n      received_date: submittedAt,\n      duplicate_mode: duplicateMode,\n      persist_result: true,\n      persistence_mode: 'postgres'\n    },\n    binary: {\n      pdf: sourceBinary[pdfKey]\n    }\n  });\n}\nreturn results;"
       },
-      "id": "normalize-form",
+      "id": "53deab58-a4fd-4bcd-913a-1838c5496d77",
       "name": "Normalize Form Submission",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        464,
-        320
+        976,
+        608
       ]
     },
     {
       "parameters": {
         "workflowId": {
+          "__rl": true,
+          "value": "i8xeeU5hMqDqhnpE",
           "mode": "list",
-          "value": "ovWVru7z6KmBhaig",
+          "cachedResultUrl": "/workflow/i8xeeU5hMqDqhnpE",
           "cachedResultName": "BIG - Expose Processing Core"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {},
+          "matchingColumns": [],
+          "schema": [],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": true
         },
         "mode": "each",
         "options": {
           "waitForSubWorkflow": true
         }
       },
-      "id": "execute-core",
+      "id": "aa073f9f-6ded-41c3-a2e4-743b493cccc0",
       "name": "Run Expose Processing Core",
       "type": "n8n-nodes-base.executeWorkflow",
       "typeVersion": 1.3,
       "position": [
-        688,
-        320
-      ]
-    },
-    {
-      "parameters": {
-        "content": "## README\n- Owner: Richard Berenczei / richard.berenczei@pwc.com\n- Dependencies: Form Trigger, BIG - Expose Processing Core sub-workflow\n- Logic Summary: Accept a manual PDF upload via n8n form, normalize the payload into the shared intake contract, and hand off to the extraction core. Returns the core's final result to the form response.\n\n## Input Contract\n- **Trigger:** n8n Form with fields `Expose PDF` (file, required) and `Duplicate Mode` (dropdown: overwrite/skip/reprocess)\n- No programmatic input — this is an operator-facing entry point\n\n## Output Contract\nReturns the Processing Core's final JSON payload directly as the form response (via `responseMode: lastNode`).\n\n## Normalized Handoff to Core\n`{ source_filename, ingestion_channel: \"form\", received_date, duplicate_mode, persist_result: true, persistence_mode: \"postgres\" }` + binary key `pdf`\n\n## Error Behavior\n- Throws if the form submission contains no PDF attachment\n- All downstream errors are handled by the Processing Core and the global Error Handler",
-        "height": 556,
-        "width": 908,
-        "color": 7
-      },
-      "id": "3f014940-2cf1-440e-8f1e-a6481d47b166",
-      "name": "README",
-      "type": "n8n-nodes-base.stickyNote",
-      "typeVersion": 1,
-      "position": [
-        -464,
-        -416
-      ]
-    },
-    {
-      "parameters": {
-        "content": "## Trigger / Input\nBlue section: operator-facing upload entry point for ad hoc processing and smoke tests.",
-        "height": 316,
-        "color": 5
-      },
-      "id": "237e6594-8444-4fcf-a61c-e0a4b631fb34",
-      "name": "Trigger & Input",
-      "type": "n8n-nodes-base.stickyNote",
-      "typeVersion": 1,
-      "position": [
-        176,
-        176
-      ]
-    },
-    {
-      "parameters": {
-        "content": "## Success Path\nGreen section: normalize uploaded form data into the shared contract and dispatch to the processing core.",
-        "height": 316,
-        "width": 488,
-        "color": 4
-      },
-      "id": "7441449a-0398-4c0b-8f80-eb960f4ccca6",
-      "name": "Normalization & Handoff",
-      "type": "n8n-nodes-base.stickyNote",
-      "typeVersion": 1,
-      "position": [
-        416,
-        176
+        1472,
+        608
       ]
     }
   ],
@@ -154,14 +161,12 @@
   },
   "settings": {
     "executionOrder": "v1",
-    "errorWorkflow": "PIlbEFexoMxalpwB",
-    "callerPolicy": "workflowsFromSameOwner",
-    "availableInMCP": false
+    "binaryMode": "separate",
+    "availableInMCP": false,
+    "callerPolicy": "workflowsFromSameOwner"
   },
   "pinData": {},
   "tags": [
-    "BIG",
-    "Lifecycle: Production",
-    "Type: Trigger"
+    "BIG"
   ]
 }
