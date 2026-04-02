@@ -1,29 +1,29 @@
 {
-  "id": "PIlbEFexoMxalpwB",
+  "id": "wrAqPCIhpjXMzilL",
   "name": "BIG - Expose Error Handler",
   "nodes": [
     {
       "parameters": {},
-      "id": "error-trigger",
+      "id": "ffa702fc-4751-41c3-bd80-cd37a8cb43ca",
       "name": "Error Trigger",
       "type": "n8n-nodes-base.errorTrigger",
       "typeVersion": 1,
       "position": [
-        224,
-        304
+        656,
+        832
       ]
     },
     {
       "parameters": {
         "jsCode": "// Safely extract primitives from the error trigger payload\n// Avoid deep-walking raw n8n objects which trigger sandbox env var guards\nconst raw = $input.first()?.json || {};\n\n// Safely read nested values using optional chaining on plain copies\nconst safeStr = (val) => (typeof val === 'string' ? val : null);\nconst safeObj = (val) => {\n  if (!val || typeof val !== 'object') return {};\n  try { return JSON.parse(JSON.stringify(val)); } catch { return {}; }\n};\n\nconst event = safeObj(raw);\nconst workflowMeta = event.workflow || {};\nconst executionMeta = event.execution || {};\nconst errorMeta = executionMeta.error || {};\n\nconst now = new Date();\nconst processedAt = now.toISOString();\nconst workflowId = safeStr(workflowMeta.id) || safeStr(executionMeta.workflowId) || 'unknown_workflow';\nconst workflowName = safeStr(workflowMeta.name) || 'Unknown Workflow';\nconst lastNode = safeStr(executionMeta.lastNodeExecuted) || null;\nconst errorMessage = safeStr(errorMeta.message) || safeStr(errorMeta.description) || 'Unknown execution error';\n\nconst payload = {\n  received_date: null,\n  provider: null,\n  provider_contact: { name: null, company: null, phone: null, email: null },\n  owner: null,\n  address: { country: 'Austria', postal_code: null, city: null, street: null, house_number: null },\n  areas: { usable_area_m2: null, plot_area_m2: null },\n  financials: {\n    target_rent_pa_eur: null, actual_rent_pa_eur: null, asking_price_eur: null,\n    price_per_m2_usable_area: null, price_per_m2_land: null,\n  },\n  property: {\n    property_type: null, ownership_type: null, construction_year: null,\n    heritage_protection: null, vacancy: null, parking_spaces: null,\n  },\n  returns: { gross_initial_yield_actual: null, gross_initial_yield_target: null },\n  notes: 'Workflow failure captured by BIG error handler.',\n  location_enrichment: {\n    latitude: null, longitude: null, aerial_image_url: null, location_description: null,\n    public_transport_access: null, distance_city_center_min: null,\n    distance_train_station_min: null, distance_airport_min: null, infrastructure: [],\n  },\n  market_context: {\n    potential_revenue: null,\n    demographics: { population_development: null, purchasing_power: null },\n  },\n  processing_metadata: {\n    document_id: 'error_' + workflowId + '_' + String(now.getTime()),\n    source_filename: null,\n    ingestion_channel: null,\n    processed_at: processedAt,\n    status: 'failed',\n    validation_errors: [\n      'workflow:' + workflowName,\n      lastNode ? 'last_node:' + lastNode : null,\n      'error:' + errorMessage,\n    ].filter(Boolean),\n  },\n  _runtime: {\n    persist_result: true,\n    persistence_mode: 'postgres',\n    alert_url: null,\n    alert_marker: null,\n  },\n};\n\nreturn [{ json: payload }];"
       },
-      "id": "build-failure-payload",
+      "id": "28a6143d-5a87-440b-8614-342f18dcc1f9",
       "name": "Build Failure Payload",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        448,
-        304
+        912,
+        832
       ]
     },
     {
@@ -38,13 +38,13 @@
           "waitForSubWorkflow": true
         }
       },
-      "id": "persist-failure-context",
+      "id": "273aa742-149a-41c4-96a8-2f847f0f9188",
       "name": "Persist Failure Context",
       "type": "n8n-nodes-base.executeWorkflow",
       "typeVersion": 1.3,
       "position": [
-        672,
-        304
+        1200,
+        832
       ]
     },
     {
@@ -56,13 +56,13 @@
           "appendAttribution": false
         }
       },
-      "id": "0660b06d-ac1b-4322-a12c-84d89b30e7bc",
+      "id": "a6d49afd-cabf-4175-862e-ca0951f78c8c",
       "name": "Send Error Email",
       "type": "n8n-nodes-base.gmail",
       "typeVersion": 2.2,
       "position": [
-        1024,
-        304
+        1488,
+        832
       ],
       "retryOnFail": true,
       "maxTries": 3,
@@ -72,29 +72,29 @@
     },
     {
       "parameters": {},
-      "id": "error-handler-complete",
+      "id": "dce3555a-2fd6-4667-bcb7-55bea572f134",
       "name": "Error Handler Complete",
       "type": "n8n-nodes-base.noOp",
       "typeVersion": 1,
       "position": [
-        1344,
-        304
+        1792,
+        832
       ]
     },
     {
       "parameters": {
         "content": "## README\n- Owner: Richard Berenczei / richard.berenczei@pwc.com\n- Dependencies: BIG - Expose Persistence sub-workflow, Gmail credential (for error email alerts)\n- Logic Summary: Capture hard workflow failures via n8n Error Trigger, build a standardized failure payload, persist it to Postgres for audit, and send an email alert.\n\n## Input Contract\n- **Trigger:** n8n Error Trigger — fires automatically when any workflow with `errorWorkflow` set to this workflow ID fails\n- Receives: `{ workflow: { id, name }, execution: { id, error, lastNodeExecuted } }`\n\n## Output Contract\nNo return value — this is a terminal error-handling workflow.\n\n## What It Does\n1. Extracts workflow name, last executed node, and error message from the trigger payload\n2. Builds a full canonical extraction payload with `status: \"failed\"` and error details in `validation_errors`\n3. Persists the failure record via the Persistence sub-workflow (document_id: `error_<workflowId>_<timestamp>`)\n4. Sends an HTML error email with workflow, node, error, and timestamp details\n\n## Error Behavior\n- Gmail node has `continueOnFail` + retry (3 attempts, 5s interval) — email failure does not block the handler\n- If persistence itself fails, the error is silently swallowed (last-resort handler)\n\n## Setup\n1. Configure a **Gmail OAuth2** credential in n8n\n2. Assign it to the \"Send Error Email\" node\n3. Re-activate this workflow",
-        "height": 712,
-        "width": 944,
+        "height": 1048,
+        "width": 1424,
         "color": 7
       },
-      "id": "635f2ac0-cd83-4b55-a2fb-e8d688ae1f2d",
+      "id": "3edd9151-3fb6-4c29-97ac-8bd109c21d4f",
       "name": "README",
       "type": "n8n-nodes-base.stickyNote",
       "typeVersion": 1,
       "position": [
-        -368,
-        -576
+        592,
+        -48
       ]
     },
     {
@@ -104,45 +104,45 @@
         "width": 504,
         "color": 5
       },
-      "id": "9dd67716-f226-45cb-a80a-511df28d02e4",
+      "id": "561bcce0-12db-4f64-ad2d-3826d437cf5c",
       "name": "Failure Intake",
       "type": "n8n-nodes-base.stickyNote",
       "typeVersion": 1,
       "position": [
-        80,
-        160
+        608,
+        688
       ]
     },
     {
       "parameters": {
         "content": "## Error / Recovery\nRed section: persist failure context, branch on alert configuration, and notify operators when escalation is enabled.",
         "height": 304,
-        "width": 696,
+        "width": 568,
         "color": 3
       },
-      "id": "b1ae6477-5e26-470a-989a-ebc23ca2f186",
+      "id": "84040a9f-2ba8-4897-9491-8ce857288029",
       "name": "Recovery Path",
       "type": "n8n-nodes-base.stickyNote",
       "typeVersion": 1,
       "position": [
-        592,
-        160
+        1120,
+        688
       ]
     },
     {
       "parameters": {
         "content": "## Success Path\nTerminate error handling cleanly once persistence and optional notifications are complete.",
         "height": 304,
-        "width": 288,
+        "width": 304,
         "color": 4
       },
-      "id": "e9b70cc1-f0a0-4da6-9dd4-bc6729ec651a",
+      "id": "7c502b38-70ec-4e6f-8c3f-ed70b3d659aa",
       "name": "Completion",
       "type": "n8n-nodes-base.stickyNote",
       "typeVersion": 1,
       "position": [
-        1296,
-        160
+        1696,
+        688
       ]
     }
   ],
@@ -194,13 +194,11 @@
   },
   "settings": {
     "executionOrder": "v1",
-    "callerPolicy": "workflowsFromSameOwner",
+    "binaryMode": "separate",
     "availableInMCP": false
   },
   "pinData": {},
   "tags": [
-    "BIG",
-    "Lifecycle: Production",
-    "Type: Utility"
+    "BIG"
   ]
 }
