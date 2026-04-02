@@ -1,5 +1,5 @@
 {
-  "id": "XpiCSPy28e22HNsQ",
+  "id": "mFvTUxaK7liHx3A5",
   "name": "BIG - Expose Intake - Email",
   "nodes": [
     {
@@ -7,26 +7,26 @@
         "downloadAttachments": true,
         "options": {}
       },
-      "id": "email-trigger",
+      "id": "51962310-ccb8-4eca-9a3a-a0d1d79287b6",
       "name": "Watch Expose Inbox",
       "type": "n8n-nodes-base.emailReadImap",
       "typeVersion": 2.1,
       "position": [
-        208,
-        288
+        848,
+        768
       ]
     },
     {
       "parameters": {
         "jsCode": "var inputItems = $input.all();\nvar outputItems = [];\nfor (var itemIndex = 0; itemIndex < inputItems.length; itemIndex += 1) {\n  var currentItem = inputItems[itemIndex] || {};\n  var sourceJson = currentItem.json || {};\n  var sourceBinary = currentItem.binary || {};\n  var binaryKeys = Object.keys(sourceBinary);\n  for (var keyIndex = 0; keyIndex < binaryKeys.length; keyIndex += 1) {\n    var binaryKey = binaryKeys[keyIndex];\n    var file = sourceBinary[binaryKey] || {};\n    var fileName = String(file.fileName || '').toLowerCase();\n    var mimeType = String(file.mimeType || '').toLowerCase();\n    if (mimeType === 'application/pdf' || fileName.endsWith('.pdf')) {\n      outputItems.push({\n        json: {\n          source_filename: file.fileName || ('email-attachment-' + keyIndex + '.pdf'),\n          ingestion_channel: 'email',\n          received_date: sourceJson.date || sourceJson.receivedDate || sourceJson.sentDate || sourceJson.internalDate || null,\n          duplicate_mode: 'overwrite',\n          persist_result: true,\n          persistence_mode: 'postgres',\n          email_subject: sourceJson.subject || null,\n          email_from: sourceJson.from || null\n        },\n        binary: {\n          pdf: file\n        }\n      });\n    }\n  }\n}\nreturn outputItems;"
       },
-      "id": "normalize-email",
+      "id": "1711558b-2699-4370-9dd3-d3799721e713",
       "name": "Split PDF Attachments",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        432,
-        288
+        1072,
+        768
       ]
     },
     {
@@ -41,29 +41,29 @@
           "waitForSubWorkflow": true
         }
       },
-      "id": "execute-core",
+      "id": "07a7b906-860a-46a2-a297-49518e01d44a",
       "name": "Run Expose Processing Core",
       "type": "n8n-nodes-base.executeWorkflow",
       "typeVersion": 1.3,
       "position": [
-        656,
-        288
+        1296,
+        768
       ]
     },
     {
       "parameters": {
         "content": "## README\n- Owner: Richard Berenczei / richard.berenczei@pwc.com\n- Status: **Draft** — not yet activated for production use\n- Dependencies: IMAP credential, BIG - Expose Processing Core sub-workflow\n- Logic Summary: Poll the configured inbox for new emails, extract all PDF attachments (one item per PDF), normalize each into the shared intake contract, and dispatch to the extraction core.\n\n## Input Contract\n- **Trigger:** IMAP email poll with `downloadAttachments: true`\n- No programmatic input — watches a mailbox automatically\n\n## Output Contract\nReturns one Processing Core result per PDF attachment found in the email.\n\n## Normalized Handoff to Core\n`{ source_filename, ingestion_channel: \"email\", received_date, duplicate_mode: \"overwrite\", persist_result: true, persistence_mode: \"postgres\", email_subject, email_from }` + binary key `pdf`\n\n## Error Behavior\n- Silently skips non-PDF attachments (no error, just filtered out)\n- If an email has zero PDF attachments, no items are emitted\n- Downstream errors are handled by the Processing Core and the global Error Handler (PIlbEFexoMxalpwB)\n\n## Known Limitations\n- `duplicate_mode` is hardcoded to `overwrite` — no per-email override\n- Emails with multiple PDFs produce independent pipeline runs with no shared context",
-        "height": 708,
-        "width": 974,
+        "height": 1076,
+        "width": 718,
         "color": 7
       },
-      "id": "5c595396-0b5f-4ad8-98d5-4fcdd27fa5d8",
+      "id": "e5ae77ca-4fa6-4125-9ef1-5baadb919913",
       "name": "README",
       "type": "n8n-nodes-base.stickyNote",
       "typeVersion": 1,
       "position": [
-        -512,
-        -608
+        768,
+        -128
       ]
     },
     {
@@ -72,13 +72,13 @@
         "height": 300,
         "color": 5
       },
-      "id": "e0f42b08-16db-45f7-809a-2f2510a9ce17",
+      "id": "2ce24593-999a-4217-b8db-f72d466ab98e",
       "name": "Mailbox Trigger",
       "type": "n8n-nodes-base.stickyNote",
       "typeVersion": 1,
       "position": [
-        144,
-        160
+        784,
+        640
       ]
     },
     {
@@ -88,13 +88,13 @@
         "width": 456,
         "color": 4
       },
-      "id": "d5726552-af3e-451e-8b44-5d2d936587f4",
+      "id": "cdbdb016-71d0-4491-b937-777a75b8959d",
       "name": "Attachment Handoff",
       "type": "n8n-nodes-base.stickyNote",
       "typeVersion": 1,
       "position": [
-        384,
-        160
+        1024,
+        640
       ]
     }
   ],
@@ -124,14 +124,11 @@
   },
   "settings": {
     "executionOrder": "v1",
-    "errorWorkflow": "PIlbEFexoMxalpwB",
-    "callerPolicy": "workflowsFromSameOwner",
+    "binaryMode": "separate",
     "availableInMCP": false
   },
   "pinData": {},
   "tags": [
-    "BIG",
-    "Lifecycle: Draft",
-    "Type: Trigger"
+    "BIG"
   ]
 }
