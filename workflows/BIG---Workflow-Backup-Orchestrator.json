@@ -1,5 +1,5 @@
 {
-  "id": "Vl5mRAp0tvwbmWl0",
+  "id": "NpyWptseeeMeZCTG",
   "name": "BIG - Workflow Backup Orchestrator",
   "nodes": [
     {
@@ -12,38 +12,38 @@
           ]
         }
       },
-      "id": "schedule-trigger",
+      "id": "cf8221f4-c030-421a-82fe-87b9b1d08b8e",
       "name": "Schedule Daily Backup",
       "type": "n8n-nodes-base.scheduleTrigger",
       "typeVersion": 1.2,
       "position": [
-        208,
-        288
+        240,
+        512
       ],
       "disabled": true
     },
     {
       "parameters": {},
-      "id": "manual-trigger",
+      "id": "e72b68c3-b862-4353-b377-f161013a7586",
       "name": "Run Backup Manually",
       "type": "n8n-nodes-base.manualTrigger",
       "typeVersion": 1,
       "position": [
-        208,
-        528
+        240,
+        752
       ]
     },
     {
       "parameters": {
         "jsCode": "const response = $input.first().json;\nconst workflows = response.data || response || [];\nconst now = new Date().toISOString();\n\nconst allWorkflows = Array.isArray(workflows) ? workflows : [];\nconst bigWorkflows = allWorkflows.filter(wf => {\n  const tags = wf.tags || [];\n  return tags.some(t => {\n    const name = typeof t === 'object' ? t.name : t;\n    return name === 'BIG';\n  });\n});\n\nif (bigWorkflows.length === 0) {\n  throw new Error('No workflows with the BIG tag were found. Total workflows returned: ' + allWorkflows.length);\n}\n\nreturn bigWorkflows.map(wf => {\n  const exportObj = {\n    id: wf.id,\n    name: wf.name,\n    nodes: wf.nodes || [],\n    connections: wf.connections || {},\n    settings: wf.settings || {},\n    pinData: {},\n    tags: (wf.tags || []).map(t => typeof t === 'object' ? t.name : t),\n  };\n  const slug = wf.name\n    .replace(/[^a-zA-Z0-9 -]/g, '')\n    .trim()\n    .replace(/ +/g, '-');\n  return {\n    json: {\n      workflow_id: wf.id,\n      workflow_name: wf.name,\n      file_path: slug + '.json',\n      version_id: wf.versionId || null,\n      version_counter: wf.versionCounter || null,\n      active: wf.active,\n      export_json: JSON.stringify(exportObj, null, 2),\n      backup_timestamp: now,\n    }\n  };\n});"
       },
-      "id": "prepare-exports",
+      "id": "20d576aa-fc27-4fd3-a40e-938d201671cf",
       "name": "Prepare Exports",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        688,
-        400
+        720,
+        624
       ]
     },
     {
@@ -66,18 +66,18 @@
         },
         "options": {}
       },
-      "id": "check-github-file",
+      "id": "e181a8b5-9b9e-42ca-8885-a7ff7e965db2",
       "name": "Check Existing File on GitHub",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.4,
       "position": [
-        1200,
-        416
+        1232,
+        640
       ],
       "credentials": {
         "githubApi": {
-          "id": "YOQuy4B0UzYkplLU",
-          "name": "GitHub account"
+          "id": "CvPehiSAjYGHXtRx",
+          "name": "GitHub"
         }
       },
       "continueOnFail": true
@@ -86,13 +86,13 @@
       "parameters": {
         "jsCode": "const ghResponse = $input.first().json;\nconst exp = $('Process One at a Time').first().json;\nconst existingSha = ghResponse.sha || null;\nconst isUpdate = !!existingSha;\nconst content = Buffer.from(exp.export_json, 'utf-8').toString('base64');\nconst action = isUpdate ? 'update' : 'create';\nconst message = action + ': ' + exp.workflow_name +\n  '\\n\\nWorkflow ID: ' + exp.workflow_id +\n  '\\nVersion: ' + (exp.version_counter || 'unknown') +\n  '\\nActive: ' + exp.active +\n  '\\nBackup: ' + exp.backup_timestamp;\nconst body = { message: message, content: content };\nif (existingSha) {\n  body.sha = existingSha;\n}\nreturn [{\n  json: {\n    file_path: exp.file_path,\n    workflow_name: exp.workflow_name,\n    workflow_id: exp.workflow_id,\n    action: action,\n    commit_body: body,\n  }\n}];"
       },
-      "id": "prepare-commit",
+      "id": "6e4a4356-00b2-4be6-9ab2-885e6967811d",
       "name": "Prepare GitHub Commit",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        1424,
-        416
+        1456,
+        640
       ]
     },
     {
@@ -119,18 +119,18 @@
         "jsonBody": "={{ JSON.stringify($json.commit_body) }}",
         "options": {}
       },
-      "id": "push-to-github",
+      "id": "870cbbdb-fe00-4779-a15f-32bc223f498a",
       "name": "Push to GitHub",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.4,
       "position": [
-        1696,
-        416
+        1728,
+        640
       ],
       "credentials": {
         "githubApi": {
-          "id": "YOQuy4B0UzYkplLU",
-          "name": "GitHub account"
+          "id": "CvPehiSAjYGHXtRx",
+          "name": "GitHub"
         }
       }
     },
@@ -138,29 +138,29 @@
       "parameters": {
         "jsCode": "return [{\n  json: {\n    status: 'complete',\n    backup_timestamp: new Date().toISOString(),\n    repository: 'berenczeiricsi/n8n-workflows',\n    message: 'All BIG workflows have been backed up to GitHub. Check the repository commit history for details.',\n  }\n}];"
       },
-      "id": "backup-summary",
+      "id": "a2718a26-c2f9-42cf-84da-61f25391d16c",
       "name": "Backup Summary",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        1696,
-        272
+        1728,
+        496
       ]
     },
     {
       "parameters": {
         "content": "## README\n- Owner: Richard Berenczei / richard.berenczei@pwc.com\n- Dependencies: n8n API credential, GitHub API credential (PAT with repo scope)\n- Target: github.com/berenczeiricsi/n8n-workflows → workflows/ directory\n- Logic Summary: Export all BIG-tagged workflows as clean JSON and commit them to GitHub for version control. Runs daily at 2 AM or on demand.\n\n## Setup\n1. Create an **n8n API key** at Settings → API → Create API Key\n2. Add an **n8n API credential** in n8n (type: n8n API) with that key\n3. Create a **GitHub Personal Access Token** with `repo` scope\n4. Add a **GitHub API credential** in n8n (type: GitHub API) with that token\n5. Assign both credentials to the highlighted nodes, then activate the workflow",
-        "height": 324,
-        "width": 1016,
+        "height": 868,
+        "width": 1784,
         "color": 7
       },
-      "id": "readme-note",
+      "id": "f2e04a21-d27b-4b28-996b-bcee2197310a",
       "name": "README",
       "type": "n8n-nodes-base.stickyNote",
       "typeVersion": 1,
       "position": [
-        -208,
-        -192
+        144,
+        32
       ]
     },
     {
@@ -170,13 +170,13 @@
         "width": 300,
         "color": 5
       },
-      "id": "trigger-section-note",
+      "id": "fb956008-3aec-4879-a23c-80a374d262a1",
       "name": "Trigger Section",
       "type": "n8n-nodes-base.stickyNote",
       "typeVersion": 1,
       "position": [
-        128,
-        160
+        160,
+        384
       ]
     },
     {
@@ -186,13 +186,13 @@
         "width": 600,
         "color": 4
       },
-      "id": "processing-section-note",
+      "id": "64c5380c-bec6-425d-bf07-f43ea1568337",
       "name": "Export Section",
       "type": "n8n-nodes-base.stickyNote",
       "typeVersion": 1,
       "position": [
-        432,
-        160
+        464,
+        384
       ]
     },
     {
@@ -202,13 +202,13 @@
         "width": 836,
         "color": 4
       },
-      "id": "github-section-note",
+      "id": "8f9875f8-a6f9-4abc-8ba6-20616527792d",
       "name": "GitHub Section",
       "type": "n8n-nodes-base.stickyNote",
       "typeVersion": 1,
       "position": [
-        1040,
-        160
+        1072,
+        384
       ]
     },
     {
@@ -227,18 +227,18 @@
         },
         "options": {}
       },
-      "id": "list-workflows",
+      "id": "71228696-7c60-43e3-99cb-495ab99bf271",
       "name": "List BIG Workflows",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.4,
       "position": [
-        480,
-        400
+        512,
+        624
       ],
       "credentials": {
         "n8nApi": {
-          "id": "drCKmQno2XOlN3vx",
-          "name": "n8n account"
+          "id": "o0echBBxxzTqffEb",
+          "name": "n8n"
         }
       }
     },
@@ -246,13 +246,13 @@
       "parameters": {
         "options": {}
       },
-      "id": "split-batches",
+      "id": "e8f2a58d-36cd-4bef-9ac6-38df9fb4a64f",
       "name": "Process One at a Time",
       "type": "n8n-nodes-base.splitInBatches",
       "typeVersion": 3,
       "position": [
-        896,
-        400
+        928,
+        624
       ]
     }
   ],
@@ -355,14 +355,11 @@
   },
   "settings": {
     "executionOrder": "v1",
-    "errorWorkflow": "PIlbEFexoMxalpwB",
-    "callerPolicy": "workflowsFromSameOwner",
+    "binaryMode": "separate",
     "availableInMCP": false
   },
   "pinData": {},
   "tags": [
-    "BIG",
-    "Lifecycle: Production",
-    "Type: Backup"
+    "BIG"
   ]
 }
